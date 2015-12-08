@@ -37,15 +37,15 @@ func NewRectangle(x1, y1, x2, y2 int) Rectangle {
 // Clip sets r to the intersection of r and s and returns a boolean value indicating
 // whether the result is of non zero size.
 func (r *Rectangle) Clip(s Rectangle) bool {
-	a := interval.Int{interval.LeftClosed, r.X, r.X + r.Width}
-	b := interval.Int{interval.LeftClosed, s.X, s.X + s.Width}
+	a := interval.Int{Cls: interval.LeftClosed, A: r.X, B: r.X + r.Width}
+	b := interval.Int{Cls: interval.LeftClosed, A: s.X, B: s.X + s.Width}
 	h0 := interval.Intersection(&a, &b)
 	if h0.Class() == interval.Empty {
 		return false
 	}
 
-	a = interval.Int{interval.LeftClosed, r.Y, r.Y + r.Height}
-	b = interval.Int{interval.LeftClosed, s.Y, s.Y + s.Height}
+	a = interval.Int{Cls: interval.LeftClosed, A: r.Y, B: r.Y + r.Height}
+	b = interval.Int{Cls: interval.LeftClosed, A: s.Y, B: s.Y + s.Height}
 	v0 := interval.Intersection(&a, &b)
 	if v0.Class() == interval.Empty {
 		return false

@@ -62,23 +62,23 @@ type WindowStyle struct {
 func (t *Theme) Clear() { *t = Theme{} }
 
 // WriteTo writes t to w in JSON format.
-func (t *Theme) WriteTo(w io.Writer) error {
+func (t *Theme) WriteTo(w io.Writer) (int64, error) {
 	b, err := json.Marshal(t)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
-	_, err = w.Write(b)
-	return err
+	n, err := w.Write(b)
+	return int64(n), err
 }
 
 // ReadFrom reads t from r in JSON format. Values of fields having no JSON data
 // are preserved.
-func (t *Theme) ReadFrom(r io.Reader) error {
+func (t *Theme) ReadFrom(r io.Reader) (int64, error) {
 	b, err := ioutil.ReadAll(r)
 	if err != nil {
-		return err
+		return 0, err
 	}
 
-	return json.Unmarshal(b, t)
+	return int64(len(b)), json.Unmarshal(b, t)
 }

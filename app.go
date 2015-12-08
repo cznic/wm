@@ -266,10 +266,10 @@ func (a *Application) ChildWindowStyle() WindowStyle { return getWindowStyle(nil
 // mouse button for any longer duration generates a drag event instead.
 func (a *Application) ClickDuration() time.Duration { return getDuration(nil, &a.click) }
 
-// Dektop returns the currently active desktop.
+// Desktop returns the currently active desktop.
 func (a *Application) Desktop() (d *Desktop) { return getDesktop(nil, &a.desktop) }
 
-// DektopStyle returns the style assigned to new desktops.
+// DesktopStyle returns the style assigned to new desktops.
 func (a *Application) DesktopStyle() WindowStyle { return getWindowStyle(nil, &a.theme.Desktop) }
 
 // DoubleClickDuration returns the maximum duration of a double click. Mouse

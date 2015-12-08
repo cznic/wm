@@ -1355,7 +1355,7 @@ func (w *Window) ClientSize() Size { return getSize(w, &w.clientArea.Size) }
 func (w *Window) ClientAreaStyle() Style { return getStyle(w, &w.style.ClientArea) }
 
 // Close closes w.
-func (w *Window) Close() { //TODO Add OnClose event.
+func (w *Window) Close() {
 	w.onClose.handle(w)
 	w.SetFocus(false)
 	if p := w.Parent(); p != nil {
