@@ -35,7 +35,7 @@ const (
 //
 // All exported methods of a Window are safe for concurrent access by multiple
 // goroutines. However, concurrent calls of Window methods that mutate its
-// state may produce flicker corrupted screen rendering.
+// state may produce flicker or corrupted screen rendering.
 type Window struct {
 	borderBotom          int                          //
 	borderLeft           int                          //
