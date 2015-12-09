@@ -1359,6 +1359,11 @@ func (w *Window) ClientAreaStyle() Style { return getStyle(w, &w.style.ClientAre
 func (w *Window) Close() {
 	w.onClose.handle(w)
 	w.SetFocus(false)
+	for w.Children() != 0 {
+		if c := w.Child(0); c != nil {
+			c.Close()
+		}
+	}
 	if p := w.Parent(); p != nil {
 		p.removeChild(w)
 		p.InvalidateClientArea(p.ClientArea())
