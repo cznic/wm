@@ -697,9 +697,9 @@ func (w *Window) onSetFocusHandler(_ *Window, prev OnSetBoolHandler, dst *bool, 
 	w.mu.Lock()
 	*dst = src
 	d := w.desktop
+	w.style.Border.Attr ^= tcell.AttrReverse
 	w.mu.Unlock()
 
-	w.style.Border.Attr ^= tcell.AttrReverse
 	switch {
 	case src:
 		d.SetFocusedWindow(w)
