@@ -216,7 +216,7 @@ func (w *Window) onClickHandler(_ *Window, prev OnMouseHandler, button tcell.But
 		return true
 	}
 
-	return false
+	return !pos.In(clArea)
 }
 
 func (w *Window) onDragHandler(_ *Window, prev OnMouseHandler, button tcell.ButtonMask, screenPos, pos Position, mods tcell.ModMask) bool {
@@ -756,6 +756,7 @@ func (w *Window) onPaintClientAreaHandler(_ *Window, prev OnPaintHandler, ctx Pa
 	if prev != nil {
 		panic("internal error")
 	}
+
 	r := ctx.Rectangle
 	r.X -= ctx.origin.X
 	r.Y -= ctx.origin.Y
