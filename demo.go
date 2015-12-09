@@ -32,6 +32,7 @@ var (
 			ClientArea: wm.Style{Background: tcell.ColorBlue, Foreground: tcell.ColorWhite},
 		},
 	}
+	renderedIn time.Duration
 )
 
 func rndColor() tcell.Color {
@@ -153,7 +154,8 @@ func main() {
 				`Ctrl-N to create a new random window.
 Ctrl-click inside a child window to create a nested random window.
 Use mouse to bring to front, drag, resize or close a window.
-Esc to quit.`)
+Esc to quit.
+Rendered in %s.`, renderedIn)
 		},
 		nil,
 	)
@@ -173,10 +175,20 @@ Esc to quit.`)
 		nil,
 	)
 	d.Show()
+	fps := 25
+	i := 0
 	go func() {
-		for range time.NewTicker(time.Millisecond * 40).C {
+		for range time.NewTicker(time.Second / time.Duration(fps)).C {
 			app.Post(func() {
+				i = (i + 1) % fps
+				var t0 time.Time
+				if i == 0 {
+					t0 = time.Now()
+				}
 				r.Invalidate(r.Area())
+				if i == 0 {
+					renderedIn = time.Since(t0)
+				}
 			})
 		}
 	}()
