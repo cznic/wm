@@ -150,10 +150,6 @@ Esc to quit.`)
 	)
 	app.OnKey(
 		func(w *wm.Window, prev wm.OnKeyHandler, key tcell.Key, mod tcell.ModMask, r rune) bool {
-			if prev != nil && prev(w, nil, key, mod, r) {
-				return true
-			}
-
 			switch key {
 			case tcell.KeyESC:
 				app.Exit(nil)

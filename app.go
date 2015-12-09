@@ -113,6 +113,7 @@ func newApplication(screen tcell.Screen, t *Theme) (*Application, error) {
 	}
 	app.screen.EnableMouse()
 	go app.handleEvents()
+	app.OnKey(app.onKeyHandler, nil)
 	app.OnSetDesktop(app.onSetDesktopHandler, nil)
 	app.OnSetSize(app.onSetSizeHandler, nil)
 	return app, nil
@@ -183,6 +184,25 @@ func (a *Application) onSetDesktopHandler(_ *Window, prev OnSetDesktopHandler, d
 	w := a.Desktop().Root()
 	w.setSize(a.Size())
 	w.Invalidate(w.Area())
+}
+
+func (a *Application) onKeyHandler(w *Window, prev OnKeyHandler, key tcell.Key, mod tcell.ModMask, r rune) bool {
+	if prev != nil {
+		panic("internal error")
+	}
+
+	d := a.Desktop()
+	if d == nil {
+		return true
+	}
+
+	fw := d.FocusedWindow()
+	if fw == nil {
+		return true
+	}
+
+	fw.onKey.handle(fw, key, mod, r)
+	return true
 }
 
 func (a *Application) onSetSizeHandler(_ *Window, prev OnSetSizeHandler, dst *Size, src Size) {
