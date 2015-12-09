@@ -25,7 +25,7 @@ var (
 	theme = &wm.Theme{
 		ChildWindow: wm.WindowStyle{
 			Border:     wm.Style{Background: tcell.ColorFuchsia, Foreground: tcell.ColorGreen},
-			ClientArea: wm.Style{Background: tcell.ColorWhite, Foreground: tcell.ColorYellow},
+			ClientArea: wm.Style{Background: tcell.ColorSilver, Foreground: tcell.ColorYellow},
 			Title:      wm.Style{Background: tcell.ColorGreen, Foreground: tcell.ColorRed},
 		},
 		Desktop: wm.WindowStyle{
@@ -33,6 +33,15 @@ var (
 		},
 	}
 )
+
+func rndColor() tcell.Color {
+	for {
+		c := tcell.Color(rand.Intn(app.Colors()))
+		if c != theme.ChildWindow.ClientArea.Background {
+			return c
+		}
+	}
+}
 
 func newWindow(parent *wm.Window, x, y int) {
 	a := parent.Size()
@@ -48,7 +57,7 @@ func newWindow(parent *wm.Window, x, y int) {
 	t := time.NewTicker(time.Millisecond * time.Duration(35+rand.Intn(10)))
 	c.SetCloseButton(true)
 	c.SetTitle(time.Now().Format("15:04:05"))
-	style := tcell.Style(0).Foreground(tcell.Color(rand.Intn(7)))
+	style := tcell.Style(0).Foreground(rndColor())
 	c.OnPaintClientArea(
 		func(w *wm.Window, prev wm.OnPaintHandler, ctx wm.PaintContext) {
 			if prev != nil {
@@ -109,7 +118,7 @@ func newWindow(parent *wm.Window, x, y int) {
 				newWindow(w, winPos.X, winPos.Y)
 				return true
 			default:
-				style = tcell.Style(0).Foreground(tcell.Color(rand.Intn(7)))
+				style = tcell.Style(0).Foreground(rndColor())
 				x, y = winPos.X, winPos.Y
 				return true
 			}

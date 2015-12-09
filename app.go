@@ -286,6 +286,11 @@ func (a *Application) ChildWindowStyle() WindowStyle { return getWindowStyle(nil
 // mouse button for any longer duration generates a drag event instead.
 func (a *Application) ClickDuration() time.Duration { return getDuration(nil, &a.click) }
 
+// Colors returns the number of colors the host terminal supports.  All colors
+// are assumed to use the ANSI color map.  If a terminal is monochrome, it will
+// return 0.
+func (a *Application) Colors() int { return a.screen.Colors() }
+
 // Desktop returns the currently active desktop.
 func (a *Application) Desktop() (d *Desktop) { return getDesktop(nil, &a.desktop) }
 
