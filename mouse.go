@@ -31,7 +31,7 @@ type mouseButtonFSM struct {
 	timeout <-chan time.Time       //
 }
 
-func newMouseButton(button tcell.ButtonMask) *mouseButtonFSM {
+func newMouseButtonFSM(button tcell.ButtonMask) *mouseButtonFSM {
 	m := &mouseButtonFSM{
 		in:     make(chan *tcell.EventMouse, 1),
 		button: button,

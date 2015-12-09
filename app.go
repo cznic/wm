@@ -108,7 +108,7 @@ func newApplication(screen tcell.Screen, t *Theme) (*Application, error) {
 
 	mask := tcell.Button1
 	for i := range app.mouseButtonFSMs {
-		app.mouseButtonFSMs[i] = newMouseButton(mask)
+		app.mouseButtonFSMs[i] = newMouseButtonFSM(mask)
 		mask <<= 1
 	}
 	app.screen.EnableMouse()
