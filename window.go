@@ -59,6 +59,7 @@ type Window struct {
 	onDoubleClick        *onMouseHandlerList          //
 	onDoubleClickBorder  *onMouseHandlerList          //
 	onDrag               *onMouseHandlerList          //
+	onDragBorder         *onMouseHandlerList          //
 	onDrop               *onMouseHandlerList          //
 	onKey                *onKeyHandlerList            //
 	onMouseMove          *onMouseHandlerList          //
@@ -103,7 +104,7 @@ func newWindow(desktop *Desktop, parent *Window, style WindowStyle) *Window {
 	addOnPaintHandler(w, &w.onClearBorders, w.onClearBordersHandler, nil)
 	addOnPaintHandler(w, &w.onPaintChildren, w.onPaintChildrenHandler, nil)
 	w.OnClickBorder(w.onClickBorderHandler, nil)
-	w.OnDrag(w.onDragHandler, nil)
+	w.OnDragBorder(w.onDragBorderHandler, nil)
 	w.OnDrop(w.onDropHandler, nil)
 	w.OnMouseMove(w.onMouseMoveHandler, nil)
 	w.OnPaintBorderBottom(w.onPaintBorderBottomHandler, nil)
@@ -199,29 +200,11 @@ func (w *Window) onClickBorderHandler(_ *Window, prev OnMouseHandler, button tce
 
 }
 
-func (w *Window) onDragHandler(_ *Window, prev OnMouseHandler, button tcell.ButtonMask, screenPos, pos Position, mods tcell.ModMask) bool {
+func (w *Window) onDragBorderHandler(_ *Window, prev OnMouseHandler, button tcell.ButtonMask, screenPos, pos Position, mods tcell.ModMask) bool {
 	if prev != nil {
 		panic("internal error")
 	}
 
-	clArea := w.ClientArea()
-	if pos.In(clArea) {
-		w.Lock()
-		for i := len(w.children) - 1; i >= 0; i-- {
-			ch := w.children[i]
-			chPos := ch.position
-			chPos.X += clArea.X
-			chPos.Y += clArea.Y
-			if r := (Rectangle{Position: chPos, Size: ch.size}); r.Has(pos) {
-				w.Unlock()
-				pos := pos
-				pos.X -= chPos.X
-				pos.Y -= chPos.Y
-				return ch.onDragHandler(nil, nil, button, screenPos, pos, mods)
-			}
-		}
-		w.Unlock()
-	}
 	if button != tcell.Button1 || mods != 0 || w.Parent() == nil {
 		return false
 	}
@@ -1019,7 +1002,35 @@ search:
 }
 
 func (w *Window) drag(button tcell.ButtonMask, pos Position, mods tcell.ModMask) {
-	w.onDrag.handle(w, button, pos, pos, mods)
+	screenPos := pos
+search:
+	clArea := w.ClientArea()
+	if pos.In(clArea) {
+		pos.X -= clArea.X
+		pos.Y -= clArea.Y
+		w.Lock()
+		var chArea Rectangle
+		for i := len(w.children) - 1; i >= 0; i-- {
+			ch := w.children[i]
+			chArea = ch.Area()
+			chArea.Position = ch.Position()
+			if pos.In(chArea) {
+				w.mu.Unlock()
+				pos.X -= chArea.X
+				pos.Y -= chArea.Y
+				w = ch
+				goto search
+			}
+		}
+
+		w.mu.Unlock()
+		w.BringToFront()
+		w.SetFocus(true)
+		w.onDrag.handle(w, button, screenPos, pos, mods)
+		return
+	}
+
+	w.onDragBorder.handle(w, button, screenPos, pos, mods)
 }
 func (w *Window) drop(button tcell.ButtonMask, pos Position, mods tcell.ModMask) {
 	w.onDrop.handle(w, button, pos, pos, mods)
@@ -1583,6 +1594,12 @@ func (w *Window) OnDrag(h OnMouseHandler, finalize func()) {
 	addOnMouseHandler(w, &w.onDrag, h, finalize)
 }
 
+// OnDragBorder sets a mouse drag border event handler. When the event handler
+// is removed, finalize is called, if not nil.
+func (w *Window) OnDragBorder(h OnMouseHandler, finalize func()) {
+	addOnMouseHandler(w, &w.onDragBorder, h, finalize)
+}
+
 // OnDrop sets a mouse drop event handler. When the event handler is removed,
 // finalize is called, if not nil.
 func (w *Window) OnDrop(h OnMouseHandler, finalize func()) {
@@ -1870,6 +1887,10 @@ func (w *Window) RemoveOnDoubleClickBorder() { removeOnMouseHandler(w, &w.onDoub
 // RemoveOnDrag undoes the most recent OnDrag call. The function will panic if
 // there is no handler set.
 func (w *Window) RemoveOnDrag() { removeOnMouseHandler(w, &w.onDrag) }
+
+// RemoveOnDragBorder undoes the most recent OnDragBorder call. The function
+// will panic if there is no handler set.
+func (w *Window) RemoveOnDragBorder() { removeOnMouseHandler(w, &w.onDragBorder) }
 
 // RemoveOnDrop undoes the most recent OnDrop call. The function will panic if
 // there is no handler set.
