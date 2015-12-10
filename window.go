@@ -57,6 +57,7 @@ type Window struct {
 	onClickBorder        *onMouseHandlerList          //
 	onClose              *onCloseHandlerList          //
 	onDoubleClick        *onMouseHandlerList          //
+	onDoubleClickBorder  *onMouseHandlerList          //
 	onDrag               *onMouseHandlerList          //
 	onDrop               *onMouseHandlerList          //
 	onKey                *onKeyHandlerList            //
@@ -984,9 +985,39 @@ search:
 
 	w.onClickBorder.handle(w, button, screenPos, pos, mods)
 }
+
 func (w *Window) doubleClick(button tcell.ButtonMask, pos Position, mods tcell.ModMask) {
-	w.onDoubleClick.handle(w, button, pos, pos, mods)
+	screenPos := pos
+search:
+	clArea := w.ClientArea()
+	if pos.In(clArea) {
+		pos.X -= clArea.X
+		pos.Y -= clArea.Y
+		w.Lock()
+		var chArea Rectangle
+		for i := len(w.children) - 1; i >= 0; i-- {
+			ch := w.children[i]
+			chArea = ch.Area()
+			chArea.Position = ch.Position()
+			if pos.In(chArea) {
+				w.mu.Unlock()
+				pos.X -= chArea.X
+				pos.Y -= chArea.Y
+				w = ch
+				goto search
+			}
+		}
+
+		w.mu.Unlock()
+		w.BringToFront()
+		w.SetFocus(true)
+		w.onDoubleClick.handle(w, button, screenPos, pos, mods)
+		return
+	}
+
+	w.onDoubleClickBorder.handle(w, button, screenPos, pos, mods)
 }
+
 func (w *Window) drag(button tcell.ButtonMask, pos Position, mods tcell.ModMask) {
 	w.onDrag.handle(w, button, pos, pos, mods)
 }
@@ -1540,6 +1571,12 @@ func (w *Window) OnDoubleClick(h OnMouseHandler, finalize func()) {
 	addOnMouseHandler(w, &w.onDoubleClick, h, finalize)
 }
 
+// OnDoubleClickBorder sets a mouse double click border event handler. When the
+// event handler is removed, finalize is called, if not nil.
+func (w *Window) OnDoubleClickBorder(h OnMouseHandler, finalize func()) {
+	addOnMouseHandler(w, &w.onDoubleClickBorder, h, finalize)
+}
+
 // OnDrag sets a mouse drag event handler. When the event handler is removed,
 // finalize is called, if not nil.
 func (w *Window) OnDrag(h OnMouseHandler, finalize func()) {
@@ -1825,6 +1862,10 @@ func (w *Window) RemoveOnClose() { removeOnCloseHandler(w, &w.onClose) }
 // RemoveOnDoubleClick undoes the most recent OnDoubleClick call. The function
 // will panic if there is no handler set.
 func (w *Window) RemoveOnDoubleClick() { removeOnMouseHandler(w, &w.onDoubleClick) }
+
+// RemoveOnDoubleClickBorder undoes the most recent OnDoubleClickBorder call.
+// The function will panic if there is no handler set.
+func (w *Window) RemoveOnDoubleClickBorder() { removeOnMouseHandler(w, &w.onDoubleClickBorder) }
 
 // RemoveOnDrag undoes the most recent OnDrag call. The function will panic if
 // there is no handler set.
