@@ -112,10 +112,10 @@ func newApplication(screen tcell.Screen, t *Theme) (*Application, error) {
 		mask <<= 1
 	}
 	app.screen.EnableMouse()
-	go app.handleEvents()
 	app.OnKey(app.onKeyHandler, nil)
 	app.OnSetDesktop(app.onSetDesktopHandler, nil)
 	app.OnSetSize(app.onSetSizeHandler, nil)
+	go app.handleEvents()
 	return app, nil
 }
 
