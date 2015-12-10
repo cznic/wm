@@ -37,7 +37,7 @@ const (
 // goroutines. However, concurrent calls of Window methods that mutate its
 // state may produce flicker or corrupted screen rendering.
 type Window struct {
-	borderBotom          int                          //
+	borderBottom         int                          //
 	borderLeft           int                          //
 	borderRight          int                          //
 	borderTop            int                          //
@@ -54,6 +54,7 @@ type Window struct {
 	mu                   sync.Mutex                   //
 	onClearBorders       *onPaintHandlerList          //
 	onClick              *onMouseHandlerList          //
+	onClickBorder        *onMouseHandlerList          //
 	onClose              *onCloseHandlerList          //
 	onDoubleClick        *onMouseHandlerList          //
 	onDrag               *onMouseHandlerList          //
@@ -100,7 +101,7 @@ func newWindow(desktop *Desktop, parent *Window, style WindowStyle) *Window {
 	}
 	addOnPaintHandler(w, &w.onClearBorders, w.onClearBordersHandler, nil)
 	addOnPaintHandler(w, &w.onPaintChildren, w.onPaintChildrenHandler, nil)
-	w.OnClick(w.onClickHandler, nil)
+	w.OnClickBorder(w.onClickBorderHandler, nil)
 	w.OnDrag(w.onDragHandler, nil)
 	w.OnDrop(w.onDropHandler, nil)
 	w.OnMouseMove(w.onMouseMoveHandler, nil)
@@ -181,42 +182,20 @@ func (w *Window) onSetCloseButtonHandler(_ *Window, prev OnSetBoolHandler, dst *
 	w.Invalidate(w.Area())
 }
 
-func (w *Window) onClickHandler(_ *Window, prev OnMouseHandler, button tcell.ButtonMask, screenPos, pos Position, mods tcell.ModMask) bool {
-	if prev != nil {
-		panic("internal error")
-	}
-
-	clArea := w.ClientArea()
-	if pos.In(clArea) {
-		w.Lock()
-		for i := len(w.children) - 1; i >= 0; i-- {
-			ch := w.children[i]
-			chPos := ch.position
-			chPos.X += clArea.X
-			chPos.Y += clArea.Y
-			if r := (Rectangle{Position: chPos, Size: ch.size}); r.Has(pos) {
-				w.Unlock()
-				pos := pos
-				pos.X -= chPos.X
-				pos.Y -= chPos.Y
-				ch.onClick.handle(ch, button, screenPos, pos, mods)
-				return true
-			}
-		}
-		w.Unlock()
-	}
-	w.BringToFront()
-	w.SetFocus(true)
+func (w *Window) onClickBorderHandler(_ *Window, prev OnMouseHandler, button tcell.ButtonMask, screenPos, pos Position, mods tcell.ModMask) bool {
 	if button != tcell.Button1 || mods != 0 {
 		return false
 	}
 
+	w.BringToFront()
+	w.SetFocus(true)
 	if w.CloseButton() && pos.In(w.closeButtonArea()) {
 		w.Close() //TODO CloseQuery
 		return true
 	}
 
-	return !pos.In(clArea)
+	return false
+
 }
 
 func (w *Window) onDragHandler(_ *Window, prev OnMouseHandler, button tcell.ButtonMask, screenPos, pos Position, mods tcell.ModMask) bool {
@@ -809,7 +788,7 @@ func (w *Window) onSetSizeHandler(_ *Window, prev OnSetSizeHandler, dst *Size, s
 	*dst = src
 	sz := Size{
 		mathutil.Max(0, w.size.Width-(w.borderLeft+w.borderRight)),
-		mathutil.Max(0, w.size.Height-(w.borderTop+w.borderBotom)),
+		mathutil.Max(0, w.size.Height-(w.borderTop+w.borderBottom)),
 	}
 	p := w.parent
 	w.mu.Unlock()
@@ -830,10 +809,10 @@ func (w *Window) onSetClientSizeHandler(_ *Window, prev OnSetSizeHandler, dst *S
 
 	w.mu.Lock()
 	src.Width = mathutil.Min(mathutil.Max(0, src.Width), w.size.Width-(w.borderLeft+w.borderRight))
-	src.Height = mathutil.Min(mathutil.Max(0, src.Height), w.size.Height-(w.borderTop+w.borderBotom))
+	src.Height = mathutil.Min(mathutil.Max(0, src.Height), w.size.Height-(w.borderTop+w.borderBottom))
 	sz := Size{
 		w.borderLeft + src.Width + w.borderRight,
-		w.borderTop + src.Height + w.borderBotom,
+		w.borderTop + src.Height + w.borderBottom,
 	}
 	p := w.parent
 	w.mu.Unlock()
@@ -856,7 +835,7 @@ func (w *Window) onSetBorderBottomHandler(_ *Window, prev OnSetIntHandler, dst *
 	*dst = src
 	sz := Size{
 		w.clientArea.Width,
-		mathutil.Max(0, w.size.Height-(w.borderTop+w.borderBotom)),
+		mathutil.Max(0, w.size.Height-(w.borderTop+w.borderBottom)),
 	}
 	w.mu.Unlock()
 
@@ -906,7 +885,7 @@ func (w *Window) onSetBorderTopHandler(_ *Window, prev OnSetIntHandler, dst *int
 	w.clientArea.Y = src
 	sz := Size{
 		w.clientArea.Width,
-		mathutil.Max(0, w.size.Height-(w.borderTop+w.borderBotom)),
+		mathutil.Max(0, w.size.Height-(w.borderTop+w.borderBottom)),
 	}
 	w.mu.Unlock()
 
@@ -975,7 +954,35 @@ func (w *Window) setPaintContext(area Rectangle, origin Position) (oldArea Recta
 }
 
 func (w *Window) click(button tcell.ButtonMask, pos Position, mods tcell.ModMask) {
-	w.onClick.handle(w, button, pos, pos, mods)
+	screenPos := pos
+search:
+	clArea := w.ClientArea()
+	if pos.In(clArea) {
+		pos.X -= clArea.X
+		pos.Y -= clArea.Y
+		w.Lock()
+		var chArea Rectangle
+		for i := len(w.children) - 1; i >= 0; i-- {
+			ch := w.children[i]
+			chArea = ch.Area()
+			chArea.Position = ch.Position()
+			if pos.In(chArea) {
+				w.mu.Unlock()
+				pos.X -= chArea.X
+				pos.Y -= chArea.Y
+				w = ch
+				goto search
+			}
+		}
+
+		w.mu.Unlock()
+		w.BringToFront()
+		w.SetFocus(true)
+		w.onClick.handle(w, button, screenPos, pos, mods)
+		return
+	}
+
+	w.onClickBorder.handle(w, button, screenPos, pos, mods)
 }
 func (w *Window) doubleClick(button tcell.ButtonMask, pos Position, mods tcell.ModMask) {
 	w.onDoubleClick.handle(w, button, pos, pos, mods)
@@ -1190,76 +1197,94 @@ func (w *Window) removeChild(ch *Window) {
 }
 
 func (w *Window) closeButtonArea() (r Rectangle) {
-	w.mu.Lock()
-	r.X = w.size.Width - closeButtonOffset
-	r.Width = closeButtonWidth
-	r.Height = 1
-	w.mu.Unlock()
+	if w.BorderTop() > 0 {
+		w.mu.Lock()
+		r.X = w.size.Width - closeButtonOffset
+		r.Width = closeButtonWidth
+		r.Height = 1
+		w.mu.Unlock()
+	}
 	return r
 }
 
 func (w *Window) topBorderDragMoveArea() (r Rectangle) {
 	r = w.BorderTopArea()
-	r.X++
-	r.Width -= 2
-	r.Height = 1
+	if !r.IsZero() {
+		r.X++
+		r.Width -= 2
+		r.Height = 1
+	}
 	return r
 }
 
 func (w *Window) leftBorderDragResizeArea() (r Rectangle) {
 	r = w.BorderLeftArea()
-	r.Y++
-	r.Height -= 2
-	r.Width = 1
+	if !r.IsZero() {
+		r.Y++
+		r.Height -= 2
+		r.Width = 1
+	}
 	return r
 }
 
 func (w *Window) rightBorderDragResizeArea() (r Rectangle) {
 	r = w.BorderRightArea()
-	r.Y++
-	r.Height -= 2
-	r.X += r.Width - 1
+	if !r.IsZero() {
+		r.Y++
+		r.Height -= 2
+		r.X += r.Width - 1
+	}
 	return r
 }
 
 func (w *Window) bottomBorderDragResizeArea() (r Rectangle) {
 	r = w.BorderBottomArea()
-	r.X++
-	r.Width -= 2
-	r.Y -= r.Height - 1
-	r.Height = 1
+	if !r.IsZero() {
+		r.X++
+		r.Width -= 2
+		r.Y -= r.Height - 1
+		r.Height = 1
+	}
 	return r
 }
 
 func (w *Window) borderLRCArea() (r Rectangle) {
 	r = w.BorderRightArea()
-	r.X += r.Width - 1
-	r.Y += r.Height - 1
-	r.Width = 1
-	r.Height = 1
+	if !r.IsZero() {
+		r.X += r.Width - 1
+		r.Y += r.Height - 1
+		r.Width = 1
+		r.Height = 1
+	}
 	return r
 }
 
 func (w *Window) borderURCArea() (r Rectangle) {
 	r = w.BorderRightArea()
-	r.X += r.Width - 1
-	r.Width = 1
-	r.Height = 1
+	if !r.IsZero() {
+		r.X += r.Width - 1
+		r.Width = 1
+		r.Height = 1
+	}
 	return r
 }
 
 func (w *Window) borderLLCArea() (r Rectangle) {
 	r = w.BorderBottomArea()
-	r.Y += r.Height - 1
-	r.Width = 1
-	r.Height = 1
+	if !r.IsZero() {
+		r.Y += r.Height - 1
+		r.Width = 1
+		r.Height = 1
+	}
 	return r
 }
 
 func (w *Window) borderULCArea() (r Rectangle) {
 	r = w.BorderTopArea()
-	r.Width = 1
-	r.Height = 1
+	if !r.IsZero() {
+		r.Width = 1
+		r.Height = 1
+	}
 	return r
 }
 
@@ -1269,14 +1294,14 @@ func (w *Window) borderULCArea() (r Rectangle) {
 func (w *Window) Area() Rectangle { return Rectangle{Size: getSize(w, &w.size)} }
 
 // BorderBottom returns the height of the bottom border.
-func (w *Window) BorderBottom() int { return getInt(w, &w.borderBotom) }
+func (w *Window) BorderBottom() int { return getInt(w, &w.borderBottom) }
 
 // BorderBottomArea returns the area of the bottom border.
 func (w *Window) BorderBottomArea() (r Rectangle) {
 	w.mu.Lock()
-	r.Y = w.size.Height - w.borderBotom
+	r.Y = w.size.Height - w.borderBottom
 	r.Width = w.size.Width
-	r.Height = w.borderBotom
+	r.Height = w.borderBottom
 	w.mu.Unlock()
 	return r
 }
@@ -1495,6 +1520,12 @@ func (w *Window) NewChild(area Rectangle) *Window {
 // finalize is called, if not nil.
 func (w *Window) OnClick(h OnMouseHandler, finalize func()) {
 	addOnMouseHandler(w, &w.onClick, h, finalize)
+}
+
+// OnClickBorder sets a mouse click border event handler. When the event
+// handler is removed, finalize is called, if not nil.
+func (w *Window) OnClickBorder(h OnMouseHandler, finalize func()) {
+	addOnMouseHandler(w, &w.onClickBorder, h, finalize)
 }
 
 // OnClose sets a window close event handler. When the event handler is
@@ -1783,6 +1814,10 @@ func (w *Window) Position() Position { return getPosition(w, &w.position) }
 // there is no handler set.
 func (w *Window) RemoveOnClick() { removeOnMouseHandler(w, &w.onClick) }
 
+// RemoveOnClickBorder undoes the most recent OnClickBorder call. The function
+// will panic if there is no handler set.
+func (w *Window) RemoveOnClickBorder() { removeOnMouseHandler(w, &w.onClickBorder) }
+
 // RemoveOnClose undoes the most recent OnClose call. The function will panic
 // if there is no handler set.
 func (w *Window) RemoveOnClose() { removeOnCloseHandler(w, &w.onClose) }
@@ -1884,7 +1919,7 @@ func (w *Window) RemoveOnSetStyle() { removeOnSetWindowStyleHandler(w, &w.onSetS
 func (w *Window) RemoveOnSetTitle() { removeOnSetStringHandler(w, &w.onSetTitle) }
 
 // SetBorderBottom sets the height of the bottom border.
-func (w *Window) SetBorderBottom(v int) { w.onSetBorderBotom.handle(w, &w.borderBotom, v) }
+func (w *Window) SetBorderBottom(v int) { w.onSetBorderBotom.handle(w, &w.borderBottom, v) }
 
 // SetBorderLeft sets the width of the left border.
 func (w *Window) SetBorderLeft(v int) { w.onSetBorderLeft.handle(w, &w.borderLeft, v) }
