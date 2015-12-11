@@ -32,7 +32,8 @@ var (
 			ClientArea: wm.Style{Background: tcell.ColorBlue, Foreground: tcell.ColorWhite},
 		},
 	}
-	renderedIn time.Duration
+	mouseMoveWindow *wm.Window
+	mousePos        wm.Position
 )
 
 func rndColor() tcell.Color {
@@ -95,6 +96,9 @@ func newWindow(parent *wm.Window, x, y int) {
 				y += dy
 			default:
 			}
+			if w == mouseMoveWindow {
+				w.Printf(0, 0, w.ClientAreaStyle(), "Mouse: %+v", mousePos)
+			}
 			w.SetCell(x, y, block, nil, style)
 		},
 		nil,
@@ -126,7 +130,18 @@ func newWindow(parent *wm.Window, x, y int) {
 		},
 		nil,
 	)
+	c.OnMouseMove(onMouseMove, nil)
 	c.SetFocus(true)
+}
+
+func onMouseMove(w *wm.Window, prev wm.OnMouseHandler, button tcell.ButtonMask, screenPos, winPos wm.Position, mods tcell.ModMask) bool {
+	mousePos = winPos
+	mouseMoveWindow = w
+	if prev != nil {
+		return prev(w, nil, button, screenPos, winPos, mods)
+	}
+
+	return true
 }
 
 func main() {
@@ -144,6 +159,7 @@ func main() {
 	app.SetDoubleClickDuration(0)
 	d := app.NewDesktop()
 	r := d.Root()
+	var renderedIn time.Duration
 	r.OnPaintClientArea(
 		func(w *wm.Window, prev wm.OnPaintHandler, ctx wm.PaintContext) {
 			if prev != nil {
@@ -156,9 +172,13 @@ Ctrl-click inside a child window to create a nested random window.
 Use mouse to bring to front, drag, resize or close a window.
 Esc to quit.
 Rendered in %s.`, renderedIn)
+			if w == mouseMoveWindow {
+				w.Printf(0, 5, w.ClientAreaStyle(), "Mouse: %+v", mousePos)
+			}
 		},
 		nil,
 	)
+	r.OnMouseMove(onMouseMove, nil)
 	app.OnKey(
 		func(w *wm.Window, prev wm.OnKeyHandler, key tcell.Key, mod tcell.ModMask, r rune) bool {
 			switch key {
