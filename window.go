@@ -105,7 +105,6 @@ func newWindow(desktop *Desktop, parent *Window, style WindowStyle) *Window {
 	addOnPaintHandler(w, &w.onPaintChildren, w.onPaintChildrenHandler, nil)
 	w.OnClickBorder(w.onClickBorderHandler, nil)
 	w.OnDragBorder(w.onDragBorderHandler, nil)
-	w.OnDrop(w.onDropHandler, nil)
 	w.OnMouseMove(w.onMouseMoveHandler, nil)
 	w.OnPaintBorderBottom(w.onPaintBorderBottomHandler, nil)
 	w.OnPaintBorderLeft(w.onPaintBorderLeftHandler, nil)
@@ -372,88 +371,6 @@ func (w *Window) onMouseMoveHandler(_ *Window, prev OnMouseHandler, button tcell
 		}
 		w.mu.Unlock()
 	}
-	return false
-}
-
-func (w *Window) onDropHandler(_ *Window, prev OnMouseHandler, button tcell.ButtonMask, screenPos, pos Position, mods tcell.ModMask) bool {
-	if prev != nil {
-		panic("internal error")
-	}
-
-	if fw := w.Desktop().FocusedWindow(); fw != nil && button == tcell.Button1 && mods == 0 {
-		fw.mu.Lock()
-		ds := fw.dragState
-		fw.dragState = 0
-		screenPos0 := fw.dragScreenPos0
-		winPos0 := fw.dragWinPos0
-		winSize0 := fw.dragWinSize0
-		fw.mu.Unlock()
-		dx := screenPos.X - screenPos0.X
-		dy := screenPos.Y - screenPos0.Y
-
-		switch ds {
-		case dragPos:
-			fw.SetPosition(Position{winPos0.X + dx, winPos0.Y + dy})
-			return true
-		case dragRightSize:
-			fw.SetSize(Size{mathutil.Max(1, winSize0.Width+dx), winSize0.Height})
-			return true
-		case dragLeftSize:
-			if dx > winSize0.Width {
-				dx = winSize0.Width - 1
-			}
-			fw.SetPosition(Position{winPos0.X + dx, winPos0.Y})
-			fw.SetSize(Size{mathutil.Max(1, winSize0.Width-dx), winSize0.Height})
-			return true
-		case dragBottomSize:
-			fw.SetSize(Size{winSize0.Width, mathutil.Max(1, winSize0.Height+dy)})
-			return true
-		case dragLRC:
-			fw.SetSize(Size{mathutil.Max(1, winSize0.Width+dx), mathutil.Max(1, winSize0.Height+dy)})
-			return true
-		case dragURC:
-			if dy > winSize0.Height {
-				dy = winSize0.Height - 1
-			}
-			fw.SetPosition(Position{winPos0.X, winPos0.Y + dy})
-			fw.SetSize(Size{mathutil.Max(1, winSize0.Width+dx), mathutil.Max(1, winSize0.Height-dy)})
-			return true
-		case dragLLC:
-			if dx > winSize0.Width {
-				dx = winSize0.Width - 1
-			}
-			fw.SetPosition(Position{winPos0.X + dx, winPos0.Y})
-			fw.SetSize(Size{mathutil.Max(1, winSize0.Width-dx), mathutil.Max(1, winSize0.Height+dy)})
-			return true
-		case dragULC:
-			if dx > winSize0.Width {
-				dx = winSize0.Width - 1
-			}
-			if dy > winSize0.Height {
-				dy = winSize0.Height - 1
-			}
-			fw.SetPosition(Position{winPos0.X + dx, winPos0.Y + dy})
-			fw.SetSize(Size{mathutil.Max(1, winSize0.Width-dx), mathutil.Max(1, winSize0.Height-dy)})
-			return true
-		}
-	}
-
-	clPos := w.ClientPosition()
-	w.Lock()
-	for i := len(w.children) - 1; i >= 0; i-- {
-		ch := w.children[i]
-		chPos := ch.position
-		chPos.X += clPos.X
-		chPos.Y += clPos.Y
-		if r := (Rectangle{Position: chPos, Size: ch.size}); r.Has(pos) {
-			w.Unlock()
-			pos := pos
-			pos.X -= chPos.X
-			pos.Y -= chPos.Y
-			return ch.onDropHandler(nil, nil, button, screenPos, pos, mods)
-		}
-	}
-	w.mu.Unlock()
 	return false
 }
 
@@ -968,43 +885,107 @@ search:
 	borderHandler(w, winPos)
 }
 
-func (w *Window) click(button tcell.ButtonMask, pos Position, mods tcell.ModMask) {
+func (w *Window) click(button tcell.ButtonMask, screenPos Position, mods tcell.ModMask) {
 	w.event(
-		pos,
+		screenPos,
 		func(w *Window, winPos Position) {
-			w.onClick.handle(w, button, pos, winPos, mods)
+			w.onClick.handle(w, button, screenPos, winPos, mods)
 		},
 		func(w *Window, winPos Position) {
-			w.onClickBorder.handle(w, button, pos, winPos, mods)
+			w.onClickBorder.handle(w, button, screenPos, winPos, mods)
 		},
 	)
 }
 
-func (w *Window) doubleClick(button tcell.ButtonMask, pos Position, mods tcell.ModMask) {
+func (w *Window) doubleClick(button tcell.ButtonMask, screenPos Position, mods tcell.ModMask) {
 	w.event(
-		pos,
+		screenPos,
 		func(w *Window, winPos Position) {
-			w.onDoubleClick.handle(w, button, pos, winPos, mods)
+			w.onDoubleClick.handle(w, button, screenPos, winPos, mods)
 		},
 		func(w *Window, winPos Position) {
-			w.onDoubleClickBorder.handle(w, button, pos, winPos, mods)
+			w.onDoubleClickBorder.handle(w, button, screenPos, winPos, mods)
 		},
 	)
 }
 
-func (w *Window) drag(button tcell.ButtonMask, pos Position, mods tcell.ModMask) {
+func (w *Window) drag(button tcell.ButtonMask, screenPos Position, mods tcell.ModMask) {
 	w.event(
-		pos,
+		screenPos,
 		func(w *Window, winPos Position) {
-			w.onDrag.handle(w, button, pos, winPos, mods)
+			w.onDrag.handle(w, button, screenPos, winPos, mods)
 		},
 		func(w *Window, winPos Position) {
-			w.onDragBorder.handle(w, button, pos, winPos, mods)
+			w.onDragBorder.handle(w, button, screenPos, winPos, mods)
 		},
 	)
 }
-func (w *Window) drop(button tcell.ButtonMask, pos Position, mods tcell.ModMask) {
-	w.onDrop.handle(w, button, pos, pos, mods)
+func (w *Window) drop(button tcell.ButtonMask, screenPos Position, mods tcell.ModMask) {
+	if fw := w.Desktop().FocusedWindow(); fw != nil && button == tcell.Button1 && mods == 0 {
+		fw.mu.Lock()
+		ds := fw.dragState
+		fw.dragState = 0
+		screenPos0 := fw.dragScreenPos0
+		winPos0 := fw.dragWinPos0
+		winSize0 := fw.dragWinSize0
+		fw.mu.Unlock()
+		dx := screenPos.X - screenPos0.X
+		dy := screenPos.Y - screenPos0.Y
+
+		switch ds {
+		case dragPos:
+			fw.SetPosition(Position{winPos0.X + dx, winPos0.Y + dy})
+			return
+		case dragRightSize:
+			fw.SetSize(Size{mathutil.Max(1, winSize0.Width+dx), winSize0.Height})
+			return
+		case dragLeftSize:
+			if dx > winSize0.Width {
+				dx = winSize0.Width - 1
+			}
+			fw.SetPosition(Position{winPos0.X + dx, winPos0.Y})
+			fw.SetSize(Size{mathutil.Max(1, winSize0.Width-dx), winSize0.Height})
+			return
+		case dragBottomSize:
+			fw.SetSize(Size{winSize0.Width, mathutil.Max(1, winSize0.Height+dy)})
+			return
+		case dragLRC:
+			fw.SetSize(Size{mathutil.Max(1, winSize0.Width+dx), mathutil.Max(1, winSize0.Height+dy)})
+			return
+		case dragURC:
+			if dy > winSize0.Height {
+				dy = winSize0.Height - 1
+			}
+			fw.SetPosition(Position{winPos0.X, winPos0.Y + dy})
+			fw.SetSize(Size{mathutil.Max(1, winSize0.Width+dx), mathutil.Max(1, winSize0.Height-dy)})
+			return
+		case dragLLC:
+			if dx > winSize0.Width {
+				dx = winSize0.Width - 1
+			}
+			fw.SetPosition(Position{winPos0.X + dx, winPos0.Y})
+			fw.SetSize(Size{mathutil.Max(1, winSize0.Width-dx), mathutil.Max(1, winSize0.Height+dy)})
+			return
+		case dragULC:
+			if dx > winSize0.Width {
+				dx = winSize0.Width - 1
+			}
+			if dy > winSize0.Height {
+				dy = winSize0.Height - 1
+			}
+			fw.SetPosition(Position{winPos0.X + dx, winPos0.Y + dy})
+			fw.SetSize(Size{mathutil.Max(1, winSize0.Width-dx), mathutil.Max(1, winSize0.Height-dy)})
+			return
+		}
+	}
+
+	w.event(
+		screenPos,
+		func(w *Window, winPos Position) {
+			w.onDrop.handle(w, button, screenPos, winPos, mods)
+		},
+		func(w *Window, winPos Position) {},
+	)
 }
 func (w *Window) mouseMove(pos Position, mods tcell.ModMask) {
 	w.onMouseMove.handle(w, 0, pos, pos, mods)
