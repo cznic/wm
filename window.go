@@ -711,10 +711,12 @@ func (w *Window) onSetBorderTopHandler(_ *Window, prev OnSetIntHandler, dst *int
 
 func (w *Window) printCell(x, y, width int, main rune, comb []rune, style tcell.Style) (int, int) {
 	switch main {
-	case '\r':
-		return 0, y
+	case '\t':
+		return x + 8 - x%8, y
 	case '\n':
 		return 0, y + 1
+	case '\r':
+		return 0, y
 	default:
 		w.SetCell(x, y, main, comb, style)
 		return x + width, y
@@ -1789,8 +1791,9 @@ func (w *Window) OnSetTitle(h OnSetStringHandler, finalize func()) {
 //
 // Special handling:
 //
-//	'\r'	x, y = 0, y
+//	'\t'	x, y = x + 8 - x%8, y
 //	'\n'	x, y = 0, y+1
+//	'\r'	x, y = 0, y
 func (w *Window) Printf(x, y int, style Style, format string, arg ...interface{}) {
 	if paintArea := getRectangle(w, &w.paintArea); paintArea.IsZero() { // Zero sized window or not in OnPaint.
 		return
