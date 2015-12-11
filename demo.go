@@ -8,6 +8,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"math/rand"
 	"time"
@@ -166,15 +167,17 @@ func main() {
 				prev(w, nil, ctx)
 			}
 
+			mousPosStr := ""
+			if w == mouseMoveWindow {
+				mousPosStr = fmt.Sprintf("Mouse: %+v", mousePos)
+			}
 			w.Printf(0, 0, w.ClientAreaStyle(),
 				`Ctrl-N to create a new random window.
 Ctrl-click inside a child window to create a nested random window.
 Use mouse to bring to front, drag, resize or close a window.
 Esc to quit.
-Rendered in %s.`, renderedIn)
-			if w == mouseMoveWindow {
-				w.Printf(0, 5, w.ClientAreaStyle(), "Mouse: %+v", mousePos)
-			}
+Rendered in %s.
+%s`, renderedIn, mousPosStr)
 		},
 		nil,
 	)
