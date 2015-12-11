@@ -4,22 +4,17 @@
 
 package wm
 
-import (
-	"sync"
-)
-
 // Desktop represents a virtual screen. An application has one or more
 // independent desktops, of which only one is visible at any given moment.
 //
 // A desktop initially contains only the automatically created root window.
 //
-// All exported methods of a Desktop are safe for concurrent access by multiple
-// goroutines.
+// Desktop methods must be called only from a function that was enqueued using
+// Application.Post or Application.PostWait.
 type Desktop struct {
-	invalidated Rectangle  //
-	mu          sync.Mutex //
-	root        *Window    // Never changes.
-	updateLevel int        //
+	invalidated Rectangle //
+	root        *Window   // Never changes.
+	updateLevel int       //
 }
 
 func newDesktop() *Desktop {
@@ -41,7 +36,7 @@ func (d *Desktop) FocusedWindow() *Window {
 		return nil
 	}
 
-	return getWindow(r, &r.focusedWindow)
+	return r.focusedWindow
 }
 
 // OnSetFocusedWindow sets a handler invoked on SetFocusedWindow. When the
@@ -98,7 +93,7 @@ func (d *Desktop) Selection() Rectangle {
 		return Rectangle{}
 	}
 
-	return getRectangle(r, &r.selection)
+	return r.selection
 }
 
 // SetFocusedWindow sets the focused window.

@@ -27,14 +27,12 @@ type onCloseHandlerList struct {
 }
 
 func addOnCloseHandler(w *Window, l **onCloseHandlerList, h OnCloseHandler, finalizer func()) {
-	w.Lock()
 	prev := *l
 	if prev == nil {
 		*l = &onCloseHandlerList{
 			h:         h,
 			finalizer: finalizer,
 		}
-		w.Unlock()
 		return
 	}
 
@@ -45,7 +43,6 @@ func addOnCloseHandler(w *Window, l **onCloseHandlerList, h OnCloseHandler, fina
 		},
 		finalizer: finalizer,
 	}
-	w.Unlock()
 }
 
 func (l *onCloseHandlerList) clear() {
@@ -58,23 +55,18 @@ func (l *onCloseHandlerList) clear() {
 }
 
 func (l *onCloseHandlerList) handle(w *Window) {
-	w.Lock()
 	if l != nil {
-		w.Unlock()
 		w.beginUpdate()
 		l.h(w, nil)
 		w.endUpdate()
 		return
 	}
 
-	w.Unlock()
 }
 
 func removeOnCloseHandler(w *Window, l **onCloseHandlerList) {
-	w.Lock()
 	node := *l
 	*l = node.prev
-	w.Unlock()
 	if f := node.finalizer; f != nil {
 		f()
 	}
@@ -95,14 +87,12 @@ type onKeyHandlerList struct {
 }
 
 func addOnKeyHandler(w *Window, l **onKeyHandlerList, h OnKeyHandler, finalizer func()) {
-	w.Lock()
 	prev := *l
 	if prev == nil {
 		*l = &onKeyHandlerList{
 			h:         h,
 			finalizer: finalizer,
 		}
-		w.Unlock()
 		return
 	}
 
@@ -113,7 +103,6 @@ func addOnKeyHandler(w *Window, l **onKeyHandlerList, h OnKeyHandler, finalizer 
 		},
 		finalizer: finalizer,
 	}
-	w.Unlock()
 }
 
 func (l *onKeyHandlerList) clear() {
@@ -126,23 +115,18 @@ func (l *onKeyHandlerList) clear() {
 }
 
 func (l *onKeyHandlerList) handle(w *Window, key tcell.Key, mod tcell.ModMask, r rune) {
-	w.Lock()
 	if l != nil {
-		w.Unlock()
 		w.beginUpdate()
 		l.h(w, nil, key, mod, r)
 		w.endUpdate()
 		return
 	}
 
-	w.Unlock()
 }
 
 func removeOnKeyHandler(w *Window, l **onKeyHandlerList) {
-	w.Lock()
 	node := *l
 	*l = node.prev
-	w.Unlock()
 	if f := node.finalizer; f != nil {
 		f()
 	}
@@ -162,14 +146,12 @@ type onMouseHandlerList struct {
 }
 
 func addOnMouseHandler(w *Window, l **onMouseHandlerList, h OnMouseHandler, finalizer func()) {
-	w.Lock()
 	prev := *l
 	if prev == nil {
 		*l = &onMouseHandlerList{
 			h:         h,
 			finalizer: finalizer,
 		}
-		w.Unlock()
 		return
 	}
 
@@ -180,7 +162,6 @@ func addOnMouseHandler(w *Window, l **onMouseHandlerList, h OnMouseHandler, fina
 		},
 		finalizer: finalizer,
 	}
-	w.Unlock()
 }
 
 func (l *onMouseHandlerList) clear() {
@@ -201,10 +182,8 @@ func (l *onMouseHandlerList) handle(w *Window, button tcell.ButtonMask, screenPo
 }
 
 func removeOnMouseHandler(w *Window, l **onMouseHandlerList) {
-	w.Lock()
 	node := *l
 	*l = node.prev
-	w.Unlock()
 	if f := node.finalizer; f != nil {
 		f()
 	}
@@ -226,7 +205,6 @@ type onPaintHandlerList struct {
 }
 
 func addOnPaintHandler(w *Window, l **onPaintHandlerList, h OnPaintHandler, finalizer func()) {
-	w.Lock()
 	prev := *l
 	if prev == nil {
 		*l = &onPaintHandlerList{
@@ -237,7 +215,6 @@ func addOnPaintHandler(w *Window, l **onPaintHandlerList, h OnPaintHandler, fina
 			},
 			finalizer: finalizer,
 		}
-		w.Unlock()
 		return
 	}
 
@@ -250,7 +227,6 @@ func addOnPaintHandler(w *Window, l **onPaintHandlerList, h OnPaintHandler, fina
 		},
 		finalizer: finalizer,
 	}
-	w.Unlock()
 }
 
 func (l *onPaintHandlerList) clear() {
@@ -271,10 +247,8 @@ func (l *onPaintHandlerList) handle(w *Window, ctx PaintContext) {
 }
 
 func removeOnPaintHandler(w *Window, l **onPaintHandlerList) {
-	w.Lock()
 	node := *l
 	*l = node.prev
-	w.Unlock()
 	if f := node.finalizer; f != nil {
 		f()
 	}
@@ -293,14 +267,12 @@ type onSetDesktopHandlerList struct {
 }
 
 func addOnSetDesktopHandler(w *Window, l **onSetDesktopHandlerList, h OnSetDesktopHandler, finalizer func()) {
-	w.Lock()
 	prev := *l
 	if prev == nil {
 		*l = &onSetDesktopHandlerList{
 			h:         h,
 			finalizer: finalizer,
 		}
-		w.Unlock()
 		return
 	}
 
@@ -311,7 +283,6 @@ func addOnSetDesktopHandler(w *Window, l **onSetDesktopHandlerList, h OnSetDeskt
 		},
 		finalizer: finalizer,
 	}
-	w.Unlock()
 }
 
 func (l *onSetDesktopHandlerList) clear() {
@@ -324,40 +295,27 @@ func (l *onSetDesktopHandlerList) clear() {
 }
 
 func (l *onSetDesktopHandlerList) handle(w *Window, dst **Desktop, src *Desktop) {
-	w.Lock()
 	if *dst == src {
-		w.Unlock()
 		return
 	}
 
 	if l == nil {
 		*dst = src
-		w.Unlock()
 		return
 	}
 
-	w.Unlock()
 	w.beginUpdate()
 	l.h(w, nil, dst, src)
 	w.endUpdate()
 }
 
 func removeOnSetDesktopHandler(w *Window, l **onSetDesktopHandlerList) {
-	w.Lock()
 	node := *l
 	*l = node.prev
-	w.Unlock()
 	if f := node.finalizer; f != nil {
 		f()
 	}
 
-}
-
-func getDesktop(w *Window, p **Desktop) (r *Desktop) {
-	w.Lock()
-	r = *p
-	w.Unlock()
-	return r
 }
 
 // OnSetDurationHandler handles requests to change values of type time.Duration.
@@ -373,14 +331,12 @@ type onSetDurationHandlerList struct {
 }
 
 func addOnSetDurationHandler(w *Window, l **onSetDurationHandlerList, h OnSetDurationHandler, finalizer func()) {
-	w.Lock()
 	prev := *l
 	if prev == nil {
 		*l = &onSetDurationHandlerList{
 			h:         h,
 			finalizer: finalizer,
 		}
-		w.Unlock()
 		return
 	}
 
@@ -391,7 +347,6 @@ func addOnSetDurationHandler(w *Window, l **onSetDurationHandlerList, h OnSetDur
 		},
 		finalizer: finalizer,
 	}
-	w.Unlock()
 }
 
 func (l *onSetDurationHandlerList) clear() {
@@ -404,39 +359,26 @@ func (l *onSetDurationHandlerList) clear() {
 }
 
 func (l *onSetDurationHandlerList) handle(w *Window, dst *time.Duration, src time.Duration) {
-	w.Lock()
 	if *dst == src {
-		w.Unlock()
 		return
 	}
 
 	if l == nil {
 		*dst = src
-		w.Unlock()
 		return
 	}
 
-	w.Unlock()
 	w.beginUpdate()
 	l.h(w, nil, dst, src)
 	w.endUpdate()
 }
 
 func removeOnSetDurationHandler(w *Window, l **onSetDurationHandlerList) {
-	w.Lock()
 	node := *l
 	*l = node.prev
-	w.Unlock()
 	if f := node.finalizer; f != nil {
 		f()
 	}
-}
-
-func getDuration(w *Window, p *time.Duration) (r time.Duration) {
-	w.Lock()
-	r = *p
-	w.Unlock()
-	return r
 }
 
 // OnSetBoolHandler handles requests to change values of type bool.
@@ -452,14 +394,12 @@ type onSetBoolHandlerList struct {
 }
 
 func addOnSetBoolHandler(w *Window, l **onSetBoolHandlerList, h OnSetBoolHandler, finalizer func()) {
-	w.Lock()
 	prev := *l
 	if prev == nil {
 		*l = &onSetBoolHandlerList{
 			h:         h,
 			finalizer: finalizer,
 		}
-		w.Unlock()
 		return
 	}
 
@@ -470,7 +410,6 @@ func addOnSetBoolHandler(w *Window, l **onSetBoolHandlerList, h OnSetBoolHandler
 		},
 		finalizer: finalizer,
 	}
-	w.Unlock()
 }
 
 func (l *onSetBoolHandlerList) clear() {
@@ -483,39 +422,26 @@ func (l *onSetBoolHandlerList) clear() {
 }
 
 func (l *onSetBoolHandlerList) handle(w *Window, dst *bool, src bool) {
-	w.Lock()
 	if *dst == src {
-		w.Unlock()
 		return
 	}
 
 	if l == nil {
 		*dst = src
-		w.Unlock()
 		return
 	}
 
-	w.Unlock()
 	w.beginUpdate()
 	l.h(w, nil, dst, src)
 	w.endUpdate()
 }
 
 func removeOnSetBoolHandler(w *Window, l **onSetBoolHandlerList) {
-	w.Lock()
 	node := *l
 	*l = node.prev
-	w.Unlock()
 	if f := node.finalizer; f != nil {
 		f()
 	}
-}
-
-func getBool(w *Window, p *bool) (r bool) {
-	w.Lock()
-	r = *p
-	w.Unlock()
-	return r
 }
 
 // OnSetIntHandler handles requests to change values of type int. If there
@@ -531,14 +457,12 @@ type onSetIntHandlerList struct {
 }
 
 func addOnSetIntHandler(w *Window, l **onSetIntHandlerList, h OnSetIntHandler, finalizer func()) {
-	w.Lock()
 	prev := *l
 	if prev == nil {
 		*l = &onSetIntHandlerList{
 			h:         h,
 			finalizer: finalizer,
 		}
-		w.Unlock()
 		return
 	}
 
@@ -549,7 +473,6 @@ func addOnSetIntHandler(w *Window, l **onSetIntHandlerList, h OnSetIntHandler, f
 		},
 		finalizer: finalizer,
 	}
-	w.Unlock()
 }
 
 func (l *onSetIntHandlerList) clear() {
@@ -562,39 +485,26 @@ func (l *onSetIntHandlerList) clear() {
 }
 
 func (l *onSetIntHandlerList) handle(w *Window, dst *int, src int) {
-	w.Lock()
 	if *dst == src {
-		w.Unlock()
 		return
 	}
 
 	if l == nil {
 		*dst = src
-		w.Unlock()
 		return
 	}
 
-	w.Unlock()
 	w.beginUpdate()
 	l.h(w, nil, dst, src)
 	w.endUpdate()
 }
 
 func removeOnSetIntHandler(w *Window, l **onSetIntHandlerList) {
-	w.Lock()
 	node := *l
 	*l = node.prev
-	w.Unlock()
 	if f := node.finalizer; f != nil {
 		f()
 	}
-}
-
-func getInt(w *Window, p *int) (r int) {
-	w.Lock()
-	r = *p
-	w.Unlock()
-	return r
 }
 
 // OnSetPositionHandler handles requests to change values of type Position. If there
@@ -610,14 +520,12 @@ type onSetPositionHandlerList struct {
 }
 
 func addOnSetPositionHandler(w *Window, l **onSetPositionHandlerList, h OnSetPositionHandler, finalizer func()) {
-	w.Lock()
 	prev := *l
 	if prev == nil {
 		*l = &onSetPositionHandlerList{
 			h:         h,
 			finalizer: finalizer,
 		}
-		w.Unlock()
 		return
 	}
 
@@ -628,7 +536,6 @@ func addOnSetPositionHandler(w *Window, l **onSetPositionHandlerList, h OnSetPos
 		},
 		finalizer: finalizer,
 	}
-	w.Unlock()
 }
 
 func (l *onSetPositionHandlerList) clear() {
@@ -641,39 +548,26 @@ func (l *onSetPositionHandlerList) clear() {
 }
 
 func (l *onSetPositionHandlerList) handle(w *Window, dst *Position, src Position) {
-	w.Lock()
 	if *dst == src {
-		w.Unlock()
 		return
 	}
 
 	if l == nil {
 		*dst = src
-		w.Unlock()
 		return
 	}
 
-	w.Unlock()
 	w.beginUpdate()
 	l.h(w, nil, dst, src)
 	w.endUpdate()
 }
 
 func removeOnSetPositionHandler(w *Window, l **onSetPositionHandlerList) {
-	w.Lock()
 	node := *l
 	*l = node.prev
-	w.Unlock()
 	if f := node.finalizer; f != nil {
 		f()
 	}
-}
-
-func getPosition(w *Window, p *Position) (r Position) {
-	w.Lock()
-	r = *p
-	w.Unlock()
-	return r
 }
 
 // OnSetRectangleHandler handles requests to change values of type Rectangle.
@@ -689,14 +583,12 @@ type onSetRectangleHandlerList struct {
 }
 
 func addOnSetRectangleHandler(w *Window, l **onSetRectangleHandlerList, h OnSetRectangleHandler, finalizer func()) {
-	w.Lock()
 	prev := *l
 	if prev == nil {
 		*l = &onSetRectangleHandlerList{
 			h:         h,
 			finalizer: finalizer,
 		}
-		w.Unlock()
 		return
 	}
 
@@ -707,7 +599,6 @@ func addOnSetRectangleHandler(w *Window, l **onSetRectangleHandlerList, h OnSetR
 		},
 		finalizer: finalizer,
 	}
-	w.Unlock()
 }
 
 func (l *onSetRectangleHandlerList) clear() {
@@ -720,39 +611,26 @@ func (l *onSetRectangleHandlerList) clear() {
 }
 
 func (l *onSetRectangleHandlerList) handle(w *Window, dst *Rectangle, src Rectangle) {
-	w.Lock()
 	if *dst == src {
-		w.Unlock()
 		return
 	}
 
 	if l == nil {
 		*dst = src
-		w.Unlock()
 		return
 	}
 
-	w.Unlock()
 	w.beginUpdate()
 	l.h(w, nil, dst, src)
 	w.endUpdate()
 }
 
 func removeOnSetRectangleHandler(w *Window, l **onSetRectangleHandlerList) {
-	w.Lock()
 	node := *l
 	*l = node.prev
-	w.Unlock()
 	if f := node.finalizer; f != nil {
 		f()
 	}
-}
-
-func getRectangle(w *Window, p *Rectangle) (r Rectangle) {
-	w.Lock()
-	r = *p
-	w.Unlock()
-	return r
 }
 
 // OnSetSizeHandler handles requests to change values of type Size. If there
@@ -768,14 +646,12 @@ type onSetSizeHandlerList struct {
 }
 
 func addOnSetSizeHandler(w *Window, l **onSetSizeHandlerList, h OnSetSizeHandler, finalizer func()) {
-	w.Lock()
 	prev := *l
 	if prev == nil {
 		*l = &onSetSizeHandlerList{
 			h:         h,
 			finalizer: finalizer,
 		}
-		w.Unlock()
 		return
 	}
 
@@ -786,7 +662,6 @@ func addOnSetSizeHandler(w *Window, l **onSetSizeHandlerList, h OnSetSizeHandler
 		},
 		finalizer: finalizer,
 	}
-	w.Unlock()
 }
 
 func (l *onSetSizeHandlerList) clear() {
@@ -799,39 +674,26 @@ func (l *onSetSizeHandlerList) clear() {
 }
 
 func (l *onSetSizeHandlerList) handle(w *Window, dst *Size, src Size) {
-	w.Lock()
 	if *dst == src {
-		w.Unlock()
 		return
 	}
 
 	if l == nil {
 		*dst = src
-		w.Unlock()
 		return
 	}
 
-	w.Unlock()
 	w.beginUpdate()
 	l.h(w, nil, dst, src)
 	w.endUpdate()
 }
 
 func removeOnSetSizeHandler(w *Window, l **onSetSizeHandlerList) {
-	w.Lock()
 	node := *l
 	*l = node.prev
-	w.Unlock()
 	if f := node.finalizer; f != nil {
 		f()
 	}
-}
-
-func getSize(w *Window, p *Size) (r Size) {
-	w.Lock()
-	r = *p
-	w.Unlock()
-	return r
 }
 
 // OnSetStringHandler handles requests to change values of type String. If there
@@ -847,14 +709,12 @@ type onSetStringHandlerList struct {
 }
 
 func addOnSetStringHandler(w *Window, l **onSetStringHandlerList, h OnSetStringHandler, finalizer func()) {
-	w.Lock()
 	prev := *l
 	if prev == nil {
 		*l = &onSetStringHandlerList{
 			h:         h,
 			finalizer: finalizer,
 		}
-		w.Unlock()
 		return
 	}
 
@@ -865,7 +725,6 @@ func addOnSetStringHandler(w *Window, l **onSetStringHandlerList, h OnSetStringH
 		},
 		finalizer: finalizer,
 	}
-	w.Unlock()
 }
 
 func (l *onSetStringHandlerList) clear() {
@@ -878,39 +737,26 @@ func (l *onSetStringHandlerList) clear() {
 }
 
 func (l *onSetStringHandlerList) handle(w *Window, dst *string, src string) {
-	w.Lock()
 	if *dst == src {
-		w.Unlock()
 		return
 	}
 
 	if l == nil {
 		*dst = src
-		w.Unlock()
 		return
 	}
 
-	w.Unlock()
 	w.beginUpdate()
 	l.h(w, nil, dst, src)
 	w.endUpdate()
 }
 
 func removeOnSetStringHandler(w *Window, l **onSetStringHandlerList) {
-	w.Lock()
 	node := *l
 	*l = node.prev
-	w.Unlock()
 	if f := node.finalizer; f != nil {
 		f()
 	}
-}
-
-func getString(w *Window, p *string) (r string) {
-	w.Lock()
-	r = *p
-	w.Unlock()
-	return r
 }
 
 // OnSetStyleHandler handles requests to change values of type Style. If there
@@ -926,14 +772,12 @@ type onSetStyleHandlerList struct {
 }
 
 func addOnSetStyleHandler(w *Window, l **onSetStyleHandlerList, h OnSetStyleHandler, finalizer func()) {
-	w.Lock()
 	prev := *l
 	if prev == nil {
 		*l = &onSetStyleHandlerList{
 			h:         h,
 			finalizer: finalizer,
 		}
-		w.Unlock()
 		return
 	}
 
@@ -944,7 +788,6 @@ func addOnSetStyleHandler(w *Window, l **onSetStyleHandlerList, h OnSetStyleHand
 		},
 		finalizer: finalizer,
 	}
-	w.Unlock()
 }
 
 func (l *onSetStyleHandlerList) clear() {
@@ -957,39 +800,26 @@ func (l *onSetStyleHandlerList) clear() {
 }
 
 func (l *onSetStyleHandlerList) handle(w *Window, dst *Style, src Style) {
-	w.Lock()
 	if *dst == src {
-		w.Unlock()
 		return
 	}
 
 	if l == nil {
 		*dst = src
-		w.Unlock()
 		return
 	}
 
-	w.Unlock()
 	w.beginUpdate()
 	l.h(w, nil, dst, src)
 	w.endUpdate()
 }
 
 func removeOnSetStyleHandler(w *Window, l **onSetStyleHandlerList) {
-	w.Lock()
 	node := *l
 	*l = node.prev
-	w.Unlock()
 	if f := node.finalizer; f != nil {
 		f()
 	}
-}
-
-func getStyle(w *Window, p *Style) (r Style) {
-	w.Lock()
-	r = *p
-	w.Unlock()
-	return r
 }
 
 // OnSetWindowHandler handles requests to change values of type *Window. If
@@ -1005,14 +835,12 @@ type onSetWindowHandlerList struct {
 }
 
 func addOnSetWindowHandler(w *Window, l **onSetWindowHandlerList, h OnSetWindowHandler, finalizer func()) {
-	w.Lock()
 	prev := *l
 	if prev == nil {
 		*l = &onSetWindowHandlerList{
 			h:         h,
 			finalizer: finalizer,
 		}
-		w.Unlock()
 		return
 	}
 
@@ -1023,7 +851,6 @@ func addOnSetWindowHandler(w *Window, l **onSetWindowHandlerList, h OnSetWindowH
 		},
 		finalizer: finalizer,
 	}
-	w.Unlock()
 }
 
 func (l *onSetWindowHandlerList) clear() {
@@ -1036,40 +863,27 @@ func (l *onSetWindowHandlerList) clear() {
 }
 
 func (l *onSetWindowHandlerList) handle(w *Window, dst **Window, src *Window) {
-	w.Lock()
 	if *dst == src {
-		w.Unlock()
 		return
 	}
 
 	if l == nil {
 		*dst = src
-		w.Unlock()
 		return
 	}
 
-	w.Unlock()
 	w.beginUpdate()
 	l.h(w, nil, dst, src)
 	w.endUpdate()
 }
 
 func removeOnSetWindowHandler(w *Window, l **onSetWindowHandlerList) {
-	w.Lock()
 	node := *l
 	*l = node.prev
-	w.Unlock()
 	if f := node.finalizer; f != nil {
 		f()
 	}
 
-}
-
-func getWindow(w *Window, p **Window) (r *Window) {
-	w.Lock()
-	r = *p
-	w.Unlock()
-	return r
 }
 
 // OnSetWindowStyleHandler handles requests to change values of type
@@ -1085,14 +899,12 @@ type onSetWindowStyleHandlerList struct {
 }
 
 func addOnSetWindowStyleHandler(w *Window, l **onSetWindowStyleHandlerList, h OnSetWindowStyleHandler, finalizer func()) {
-	w.Lock()
 	prev := *l
 	if prev == nil {
 		*l = &onSetWindowStyleHandlerList{
 			h:         h,
 			finalizer: finalizer,
 		}
-		w.Unlock()
 		return
 	}
 
@@ -1103,7 +915,6 @@ func addOnSetWindowStyleHandler(w *Window, l **onSetWindowStyleHandlerList, h On
 		},
 		finalizer: finalizer,
 	}
-	w.Unlock()
 }
 
 func (l *onSetWindowStyleHandlerList) clear() {
@@ -1116,37 +927,24 @@ func (l *onSetWindowStyleHandlerList) clear() {
 }
 
 func (l *onSetWindowStyleHandlerList) handle(w *Window, dst *WindowStyle, src WindowStyle) {
-	w.Lock()
 	if *dst == src {
-		w.Unlock()
 		return
 	}
 
 	if l == nil {
 		*dst = src
-		w.Unlock()
 		return
 	}
 
-	w.Unlock()
 	w.beginUpdate()
 	l.h(w, nil, dst, src)
 	w.endUpdate()
 }
 
 func removeOnSetWindowStyleHandler(w *Window, l **onSetWindowStyleHandlerList) {
-	w.Lock()
 	node := *l
 	*l = node.prev
-	w.Unlock()
 	if f := node.finalizer; f != nil {
 		f()
 	}
-}
-
-func getWindowStyle(w *Window, p *WindowStyle) (r WindowStyle) {
-	w.Lock()
-	r = *p
-	w.Unlock()
-	return r
 }

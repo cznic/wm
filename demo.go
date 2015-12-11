@@ -58,9 +58,9 @@ func newWindow(parent *wm.Window, x, y int) {
 	x, y = 0, 0
 	dx, dy := 1, 1
 	t := time.NewTicker(time.Millisecond * time.Duration(35+rand.Intn(10)))
+	style := tcell.Style(0).Foreground(rndColor())
 	c.SetCloseButton(true)
 	c.SetTitle(time.Now().Format("15:04:05"))
-	style := tcell.Style(0).Foreground(rndColor())
 	c.OnPaintClientArea(
 		func(w *wm.Window, prev wm.OnPaintHandler, ctx wm.PaintContext) {
 			if prev != nil {
@@ -121,7 +121,7 @@ func newWindow(parent *wm.Window, x, y int) {
 
 			switch {
 			case mods&tcell.ModCtrl != 0:
-				newWindow(w, winPos.X, winPos.Y)
+				app.PostWait(func() { newWindow(w, winPos.X, winPos.Y) })
 				return true
 			default:
 				style = tcell.Style(0).Foreground(rndColor())
@@ -155,49 +155,57 @@ func main() {
 		log.Fatal(err)
 	}
 
-	defer app.Finalize()
+	defer func() {
+		app.PostWait(func() { app.Finalize() })
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
 
-	app.SetDoubleClickDuration(0)
-	d := app.NewDesktop()
-	r := d.Root()
+	var r *wm.Window
 	var renderedIn time.Duration
-	r.OnPaintClientArea(
-		func(w *wm.Window, prev wm.OnPaintHandler, ctx wm.PaintContext) {
-			if prev != nil {
-				prev(w, nil, ctx)
-			}
+	app.PostWait(func() {
+		app.SetDoubleClickDuration(0)
+		d := app.NewDesktop()
+		r = d.Root()
+		r.OnPaintClientArea(
+			func(w *wm.Window, prev wm.OnPaintHandler, ctx wm.PaintContext) {
+				if prev != nil {
+					prev(w, nil, ctx)
+				}
 
-			mousPosStr := ""
-			if w == mouseMoveWindow {
-				mousPosStr = fmt.Sprintf("Mouse: %+v", mousePos)
-			}
-			w.Printf(0, 0, w.ClientAreaStyle(),
-				`Ctrl-N to create a new random window.
+				mousPosStr := ""
+				if w == mouseMoveWindow {
+					mousPosStr = fmt.Sprintf("Mouse: %+v", mousePos)
+				}
+				w.Printf(0, 0, w.ClientAreaStyle(),
+					`Ctrl-N to create a new random window.
 Ctrl-click inside a child window to create a nested random window.
 Use mouse to bring to front, drag, resize or close a window.
 Esc to quit.
 Rendered in %s.
 %s`, renderedIn, mousPosStr)
-		},
-		nil,
-	)
-	r.OnMouseMove(onMouseMove, nil)
-	app.OnKey(
-		func(w *wm.Window, prev wm.OnKeyHandler, key tcell.Key, mod tcell.ModMask, r rune) bool {
-			switch key {
-			case tcell.KeyESC:
-				app.Exit(nil)
-				return true
-			case tcell.KeyCtrlN:
-				newWindow(app.Desktop().Root(), -1, -1)
-				return true
-			default:
-				return false
-			}
-		},
-		nil,
-	)
-	d.Show()
+			},
+			nil,
+		)
+		r.OnMouseMove(onMouseMove, nil)
+		app.OnKey(
+			func(w *wm.Window, prev wm.OnKeyHandler, key tcell.Key, mod tcell.ModMask, r rune) bool {
+				switch key {
+				case tcell.KeyESC:
+					app.Exit(nil)
+					return true
+				case tcell.KeyCtrlN:
+					app.PostWait(func() { newWindow(app.Desktop().Root(), -1, -1) })
+					return true
+				default:
+					return false
+				}
+			},
+			nil,
+		)
+		d.Show()
+	})
 	fps := 25
 	i := 0
 	go func() {
@@ -216,7 +224,5 @@ Rendered in %s.
 		}
 	}()
 
-	if err := app.Wait(); err != nil {
-		log.Println(err)
-	}
+	err = app.Wait()
 }

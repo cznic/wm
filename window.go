@@ -6,7 +6,6 @@ package wm
 
 import (
 	"fmt"
-	"sync"
 
 	"github.com/cznic/mathutil"
 	"github.com/gdamore/tcell"
@@ -31,11 +30,10 @@ const (
 )
 
 // Window represents a rectangular area of a screen. A window can have borders
-// on all of its sizes.
+// on all of its sizes and a title.
 //
-// All exported methods of a Window are safe for concurrent access by multiple
-// goroutines. However, concurrent calls of Window methods that mutate its
-// state may produce flicker or corrupted screen rendering.
+// Window methods must be called only from a function that was enqueued using
+// Application.Post or Application.PostWait.
 type Window struct {
 	borderBottom         int                          //
 	borderLeft           int                          //
@@ -51,7 +49,6 @@ type Window struct {
 	dragWinSize0         Size                         // Window size on drag event.
 	focus                bool                         //
 	focusedWindow        *Window                      // Root window only.
-	mu                   sync.Mutex                   //
 	onClearBorders       *onPaintHandlerList          //
 	onClick              *onMouseHandlerList          //
 	onClickBorder        *onMouseHandlerList          //
@@ -128,11 +125,9 @@ func newWindow(desktop *Desktop, parent *Window, style WindowStyle) *Window {
 }
 
 func (w *Window) setCell(x, y int, mainc rune, combc []rune, style tcell.Style) {
-	w.mu.Lock()
 	o := w.position
 	paintArea := w.paintArea
 	paintOrigin := w.paintOrigin
-	w.mu.Unlock()
 	o.X += paintOrigin.X
 	o.Y += paintOrigin.Y
 	if !(Position{paintOrigin.X + x, paintOrigin.Y + y}).In(paintArea) {
@@ -165,9 +160,7 @@ func (w *Window) onSetTitleHandler(_ *Window, prev OnSetStringHandler, dst *stri
 		panic("internal error")
 	}
 
-	w.mu.Lock()
 	*dst = src
-	w.mu.Unlock()
 	w.Invalidate(w.Area())
 }
 
@@ -176,9 +169,7 @@ func (w *Window) onSetCloseButtonHandler(_ *Window, prev OnSetBoolHandler, dst *
 		panic("internal error")
 	}
 
-	w.mu.Lock()
 	*dst = src
-	w.mu.Unlock()
 	w.Invalidate(w.Area())
 }
 
@@ -211,78 +202,62 @@ func (w *Window) onDragBorderHandler(_ *Window, prev OnMouseHandler, button tcel
 	case pos.In(w.topBorderDragMoveArea()):
 		w.BringToFront()
 		w.SetFocus(true)
-		w.mu.Lock()
 		w.dragState = dragPos
 		w.dragScreenPos0 = screenPos
 		w.dragWinPos0 = w.position
-		w.mu.Unlock()
 		return true
 	case pos.In(w.rightBorderDragResizeArea()):
 		w.BringToFront()
 		w.SetFocus(true)
-		w.mu.Lock()
 		w.dragState = dragRightSize
 		w.dragScreenPos0 = screenPos
 		w.dragWinSize0 = w.size
-		w.mu.Unlock()
 		return true
 	case pos.In(w.leftBorderDragResizeArea()):
 		w.BringToFront()
 		w.SetFocus(true)
-		w.mu.Lock()
 		w.dragState = dragLeftSize
 		w.dragScreenPos0 = screenPos
 		w.dragWinPos0 = w.position
 		w.dragWinSize0 = w.size
-		w.mu.Unlock()
 		return true
 	case pos.In(w.bottomBorderDragResizeArea()):
 		w.BringToFront()
 		w.SetFocus(true)
-		w.mu.Lock()
 		w.dragState = dragBottomSize
 		w.dragScreenPos0 = screenPos
 		w.dragWinSize0 = w.size
-		w.mu.Unlock()
 		return true
 	case pos.In(w.borderLRCArea()):
 		w.BringToFront()
 		w.SetFocus(true)
-		w.mu.Lock()
 		w.dragState = dragLRC
 		w.dragScreenPos0 = screenPos
 		w.dragWinSize0 = w.size
-		w.mu.Unlock()
 		return true
 	case pos.In(w.borderURCArea()):
 		w.BringToFront()
 		w.SetFocus(true)
-		w.mu.Lock()
 		w.dragState = dragURC
 		w.dragScreenPos0 = screenPos
 		w.dragWinPos0 = w.position
 		w.dragWinSize0 = w.size
-		w.mu.Unlock()
 		return true
 	case pos.In(w.borderLLCArea()):
 		w.BringToFront()
 		w.SetFocus(true)
-		w.mu.Lock()
 		w.dragState = dragLLC
 		w.dragScreenPos0 = screenPos
 		w.dragWinPos0 = w.position
 		w.dragWinSize0 = w.size
-		w.mu.Unlock()
 		return true
 	case pos.In(w.borderULCArea()):
 		w.BringToFront()
 		w.SetFocus(true)
-		w.mu.Lock()
 		w.dragState = dragULC
 		w.dragScreenPos0 = screenPos
 		w.dragWinPos0 = w.position
 		w.dragWinSize0 = w.size
-		w.mu.Unlock()
 		return true
 	default:
 		return false
@@ -455,9 +430,7 @@ func (w *Window) onSetSelectionHandler(_ *Window, prev OnSetRectangleHandler, ds
 	}
 
 	app.beginUpdate()
-	w.mu.Lock()
 	*dst = src
-	w.mu.Unlock()
 	app.endUpdate()
 }
 
@@ -468,10 +441,8 @@ func (w *Window) onSetFocusedWindowHandler(_ *Window, prev OnSetWindowHandler, d
 		panic("internal error")
 	}
 
-	w.mu.Lock()
 	old := *dst
 	*dst = src
-	w.mu.Unlock()
 	if old != nil {
 		old.SetFocus(false)
 	}
@@ -490,11 +461,9 @@ func (w *Window) onSetFocusHandler(_ *Window, prev OnSetBoolHandler, dst *bool, 
 		panic("internal error")
 	}
 
-	w.mu.Lock()
 	*dst = src
 	d := w.desktop
 	w.style.Border.Attr ^= tcell.AttrReverse
-	w.mu.Unlock()
 
 	switch {
 	case src:
@@ -509,9 +478,7 @@ func (w *Window) onSetBorderStyleHandler(_ *Window, prev OnSetStyleHandler, dst 
 		panic("internal error")
 	}
 
-	w.mu.Lock()
 	*dst = src
-	w.mu.Unlock()
 	w.Invalidate(w.BorderTopArea())
 	w.Invalidate(w.BorderLeftArea())
 	w.Invalidate(w.BorderRightArea())
@@ -523,9 +490,7 @@ func (w *Window) onSetClientAreaStyleHandler(_ *Window, prev OnSetStyleHandler, 
 		panic("internal error")
 	}
 
-	w.mu.Lock()
 	*dst = src
-	w.mu.Unlock()
 	w.InvalidateClientArea(w.ClientArea())
 }
 
@@ -534,9 +499,7 @@ func (w *Window) onSetStyleHandler(_ *Window, prev OnSetWindowStyleHandler, dst 
 		panic("internal error")
 	}
 
-	w.mu.Lock()
 	*dst = src
-	w.mu.Unlock()
 	w.Invalidate(w.Area())
 }
 
@@ -587,10 +550,8 @@ func (w *Window) onSetPositionHandler(_ *Window, prev OnSetPositionHandler, dst 
 		panic("internal error")
 	}
 
-	w.mu.Lock()
 	*dst = src
 	p := w.parent
-	w.mu.Unlock()
 	p.InvalidateClientArea(p.ClientArea())
 }
 
@@ -599,7 +560,6 @@ func (w *Window) onSetSizeHandler(_ *Window, prev OnSetSizeHandler, dst *Size, s
 		panic("internal error")
 	}
 
-	w.mu.Lock()
 	src.Width = mathutil.Max(0, src.Width)
 	src.Height = mathutil.Max(0, src.Height)
 	*dst = src
@@ -608,7 +568,6 @@ func (w *Window) onSetSizeHandler(_ *Window, prev OnSetSizeHandler, dst *Size, s
 		mathutil.Max(0, w.size.Height-(w.borderTop+w.borderBottom)),
 	}
 	p := w.parent
-	w.mu.Unlock()
 
 	w.SetClientSize(sz)
 	if p != nil {
@@ -624,7 +583,6 @@ func (w *Window) onSetClientSizeHandler(_ *Window, prev OnSetSizeHandler, dst *S
 		panic("internal error")
 	}
 
-	w.mu.Lock()
 	src.Width = mathutil.Min(mathutil.Max(0, src.Width), w.size.Width-(w.borderLeft+w.borderRight))
 	src.Height = mathutil.Min(mathutil.Max(0, src.Height), w.size.Height-(w.borderTop+w.borderBottom))
 	sz := Size{
@@ -632,7 +590,6 @@ func (w *Window) onSetClientSizeHandler(_ *Window, prev OnSetSizeHandler, dst *S
 		w.borderTop + src.Height + w.borderBottom,
 	}
 	p := w.parent
-	w.mu.Unlock()
 
 	w.SetSize(sz)
 	if p != nil {
@@ -648,13 +605,11 @@ func (w *Window) onSetBorderBottomHandler(_ *Window, prev OnSetIntHandler, dst *
 		panic("internal error")
 	}
 
-	w.mu.Lock()
 	*dst = src
 	sz := Size{
 		w.clientArea.Width,
 		mathutil.Max(0, w.size.Height-(w.borderTop+w.borderBottom)),
 	}
-	w.mu.Unlock()
 
 	w.SetClientSize(sz)
 }
@@ -664,14 +619,12 @@ func (w *Window) onSetBorderLeftHandler(_ *Window, prev OnSetIntHandler, dst *in
 		panic("internal error")
 	}
 
-	w.mu.Lock()
 	*dst = src
 	w.clientArea.X = src
 	sz := Size{
 		mathutil.Max(0, w.size.Width-(w.borderLeft+w.borderRight)),
 		w.clientArea.Height,
 	}
-	w.mu.Unlock()
 
 	w.SetClientSize(sz)
 }
@@ -681,13 +634,11 @@ func (w *Window) onSetBorderRightHandler(_ *Window, prev OnSetIntHandler, dst *i
 		panic("internal error")
 	}
 
-	w.mu.Lock()
 	*dst = src
 	sz := Size{
 		mathutil.Max(0, w.size.Width-(w.borderLeft+w.borderRight)),
 		w.clientArea.Height,
 	}
-	w.mu.Unlock()
 
 	w.SetClientSize(sz)
 }
@@ -697,14 +648,12 @@ func (w *Window) onSetBorderTopHandler(_ *Window, prev OnSetIntHandler, dst *int
 		panic("internal error")
 	}
 
-	w.mu.Lock()
 	*dst = src
 	w.clientArea.Y = src
 	sz := Size{
 		w.clientArea.Width,
 		mathutil.Max(0, w.size.Height-(w.borderTop+w.borderBottom)),
 	}
-	w.mu.Unlock()
 
 	w.SetClientSize(sz)
 }
@@ -727,12 +676,10 @@ func (w *Window) printCell(x, y, width int, main rune, comb []rune, style tcell.
 func (w *Window) beginUpdate() {
 	if w != nil {
 		d := w.Desktop()
-		d.mu.Lock()
 		d.updateLevel++
 		if d.updateLevel == 1 {
 			d.invalidated = Rectangle{}
 		}
-		d.mu.Unlock()
 		return
 	}
 
@@ -743,11 +690,9 @@ func (w *Window) beginUpdate() {
 func (w *Window) endUpdate() {
 	if w != nil {
 		d := w.Desktop()
-		d.mu.Lock()
 		d.updateLevel--
 		paint := d.updateLevel == 0
 		invalidated := d.invalidated
-		d.mu.Unlock()
 		if paint && !invalidated.IsZero() {
 			app.beginUpdate()
 			d.Root().paint(invalidated)
@@ -763,12 +708,10 @@ func (w *Window) endUpdate() {
 func (w *Window) setSize(s Size) { w.onSetSize.handle(w, &w.size, s) }
 
 func (w *Window) setPaintContext(area Rectangle, origin Position) (oldArea Rectangle, oldPosition Position) {
-	w.mu.Lock()
 	oldArea = w.paintArea
 	oldPosition = w.paintOrigin
 	w.paintArea = area
 	w.paintOrigin = origin
-	w.mu.Unlock()
 	return oldArea, oldPosition
 }
 
@@ -778,14 +721,12 @@ search:
 	if winPos.In(clArea) {
 		winPos.X -= clArea.X
 		winPos.Y -= clArea.Y
-		w.Lock()
 		var chArea Rectangle
 		for i := len(w.children) - 1; i >= 0; i-- {
 			ch := w.children[i]
 			chArea = ch.Area()
 			chArea.Position = ch.Position()
 			if winPos.In(chArea) {
-				w.mu.Unlock()
 				winPos.X -= chArea.X
 				winPos.Y -= chArea.Y
 				w = ch
@@ -793,7 +734,6 @@ search:
 			}
 		}
 
-		w.mu.Unlock()
 		if setFocus {
 			w.BringToFront()
 			w.SetFocus(true)
@@ -845,13 +785,11 @@ func (w *Window) drag(button tcell.ButtonMask, screenPos Position, mods tcell.Mo
 }
 func (w *Window) drop(button tcell.ButtonMask, screenPos Position, mods tcell.ModMask) {
 	if fw := w.Desktop().FocusedWindow(); fw != nil && button == tcell.Button1 && mods == 0 {
-		fw.mu.Lock()
 		ds := fw.dragState
 		fw.dragState = 0
 		screenPos0 := fw.dragScreenPos0
 		winPos0 := fw.dragWinPos0
 		winSize0 := fw.dragWinSize0
-		fw.mu.Unlock()
 		dx := screenPos.X - screenPos0.X
 		dy := screenPos.Y - screenPos0.Y
 
@@ -913,12 +851,10 @@ func (w *Window) drop(button tcell.ButtonMask, screenPos Position, mods tcell.Mo
 }
 func (w *Window) mouseMove(screenPos Position, mods tcell.ModMask) {
 	if fw := w.Desktop().FocusedWindow(); fw != nil {
-		fw.mu.Lock()
 		ds := fw.dragState
 		screenPos0 := fw.dragScreenPos0
 		winPos0 := fw.dragWinPos0
 		winSize0 := fw.dragWinSize0
-		fw.mu.Unlock()
 		dx := screenPos.X - screenPos0.X
 		dy := screenPos.Y - screenPos0.Y
 
@@ -982,17 +918,15 @@ func (w *Window) mouseMove(screenPos Position, mods tcell.ModMask) {
 // paint asks w to render an area.
 func (w *Window) paint(area Rectangle) {
 	d := w.Desktop()
-	if area.IsZero() || !area.Clip(Rectangle{Size: getSize(w, &w.size)}) || d != app.Desktop() {
+	if area.IsZero() || !area.Clip(Rectangle{Size: w.size}) || d != app.Desktop() {
 		return
 	}
 
-	d.mu.Lock()
 	if d.updateLevel != 0 {
 		for {
 			p := w.Parent()
 			if p == nil {
 				d.invalidated.join(area)
-				d.mu.Unlock()
 				return
 			}
 
@@ -1003,7 +937,6 @@ func (w *Window) paint(area Rectangle) {
 			w = p
 		}
 	}
-	d.mu.Unlock()
 
 	a0 := w.Area()
 	if a := a0; a.Clip(area) {
@@ -1055,7 +988,7 @@ func (w *Window) print(x, y int, style tcell.Style, s string) {
 		return
 	}
 
-	if paintArea := getRectangle(w, &w.paintArea); paintArea.IsZero() { // Zero sized window or not in OnPaint.
+	if w.paintArea.IsZero() { // Zero sized window or not in OnPaint.
 		return
 	}
 
@@ -1149,11 +1082,9 @@ func (w *Window) bringToFront(c *Window) {
 	if p := w.Parent(); p != nil {
 		p.bringToFront(w)
 	}
-	w.mu.Lock()
 	for i, v := range w.children {
 		if v == c {
 			if i == len(w.children)-1 { // Already in front.
-				w.mu.Unlock()
 				return
 			}
 
@@ -1162,12 +1093,10 @@ func (w *Window) bringToFront(c *Window) {
 			break
 		}
 	}
-	w.mu.Unlock()
 	w.InvalidateClientArea(w.ClientArea())
 }
 
 func (w *Window) removeChild(ch *Window) {
-	w.mu.Lock()
 	for i, v := range w.children {
 		if v == ch {
 			copy(w.children[i:], w.children[i+1:])
@@ -1175,16 +1104,13 @@ func (w *Window) removeChild(ch *Window) {
 			break
 		}
 	}
-	w.mu.Unlock()
 }
 
 func (w *Window) closeButtonArea() (r Rectangle) {
 	if w.BorderTop() > 0 {
-		w.mu.Lock()
 		r.X = w.size.Width - closeButtonOffset
 		r.Width = closeButtonWidth
 		r.Height = 1
-		w.mu.Unlock()
 	}
 	return r
 }
@@ -1273,58 +1199,50 @@ func (w *Window) borderULCArea() (r Rectangle) {
 // ----------------------------------------------------------------------------
 
 // Area returns the area of the window.
-func (w *Window) Area() Rectangle { return Rectangle{Size: getSize(w, &w.size)} }
+func (w *Window) Area() Rectangle { return Rectangle{Size: w.size} }
 
 // BorderBottom returns the height of the bottom border.
-func (w *Window) BorderBottom() int { return getInt(w, &w.borderBottom) }
+func (w *Window) BorderBottom() int { return w.borderBottom }
 
 // BorderBottomArea returns the area of the bottom border.
 func (w *Window) BorderBottomArea() (r Rectangle) {
-	w.mu.Lock()
 	r.Y = w.size.Height - w.borderBottom
 	r.Width = w.size.Width
 	r.Height = w.borderBottom
-	w.mu.Unlock()
 	return r
 }
 
 // BorderLeft returns the width of the left border.
-func (w *Window) BorderLeft() int { return getInt(w, &w.borderLeft) }
+func (w *Window) BorderLeft() int { return w.borderLeft }
 
 // BorderLeftArea returns the area of the left border.
 func (w *Window) BorderLeftArea() (r Rectangle) {
-	w.mu.Lock()
 	r.Width = w.borderLeft
 	r.Height = w.size.Height
-	w.mu.Unlock()
 	return r
 }
 
 // BorderRight returns the width of the right border.
-func (w *Window) BorderRight() int { return getInt(w, &w.borderRight) }
+func (w *Window) BorderRight() int { return w.borderRight }
 
 // BorderRightArea returns the area of the right border.
 func (w *Window) BorderRightArea() (r Rectangle) {
-	w.mu.Lock()
 	r.X = w.size.Width - w.borderRight
 	r.Width = w.borderRight
 	r.Height = w.size.Height
-	w.mu.Unlock()
 	return r
 }
 
 // BorderStyle returns the border style.
-func (w *Window) BorderStyle() Style { return getStyle(w, &w.style.Border) }
+func (w *Window) BorderStyle() Style { return w.style.Border }
 
 // BorderTop returns the height of the top border.
-func (w *Window) BorderTop() int { return getInt(w, &w.borderTop) }
+func (w *Window) BorderTop() int { return w.borderTop }
 
 // BorderTopArea returns the area of the top border.
 func (w *Window) BorderTopArea() (r Rectangle) {
-	w.mu.Lock()
 	r.Width = w.size.Width
 	r.Height = w.borderTop
-	w.mu.Unlock()
 	return r
 }
 
@@ -1334,33 +1252,29 @@ func (w *Window) BringToFront() { w.Parent().bringToFront(w) }
 
 // Child returns the nth child window or nil if no such exists.
 func (w *Window) Child(n int) (r *Window) {
-	w.mu.Lock()
 	if n < len(w.children) {
 		r = w.children[n]
 	}
-	w.mu.Unlock()
 	return r
 }
 
 // Children returns the number of child windows.
 func (w *Window) Children() (r int) {
-	w.mu.Lock()
 	r = len(w.children)
-	w.mu.Unlock()
 	return r
 }
 
 // ClientArea returns the client area.
-func (w *Window) ClientArea() Rectangle { return getRectangle(w, &w.clientArea) }
+func (w *Window) ClientArea() Rectangle { return w.clientArea }
 
 // ClientPosition returns the position of the client area relative to w.
-func (w *Window) ClientPosition() Position { return getPosition(w, &w.clientArea.Position) }
+func (w *Window) ClientPosition() Position { return w.clientArea.Position }
 
 // ClientSize returns the size of the client area.
-func (w *Window) ClientSize() Size { return getSize(w, &w.clientArea.Size) }
+func (w *Window) ClientSize() Size { return w.clientArea.Size }
 
 // ClientAreaStyle returns the client area style.
-func (w *Window) ClientAreaStyle() Style { return getStyle(w, &w.style.ClientArea) }
+func (w *Window) ClientAreaStyle() Style { return w.style.ClientArea }
 
 // Close closes w.
 func (w *Window) Close() {
@@ -1412,17 +1326,17 @@ func (w *Window) Close() {
 }
 
 // CloseButton returns whether the window shows a close button.
-func (w *Window) CloseButton() bool { return getBool(w, &w.closeButton) }
+func (w *Window) CloseButton() bool { return w.closeButton }
 
 // Desktop returns which Desktop w appears on.
-func (w *Window) Desktop() *Desktop { return getDesktop(w, &w.desktop) }
+func (w *Window) Desktop() *Desktop { return w.desktop }
 
 // Focus returns wheter the window is focused.
-func (w *Window) Focus() bool { return getBool(w, &w.focus) }
+func (w *Window) Focus() bool { return w.focus }
 
 // Invalidate marks a window area for repaint.
 func (w *Window) Invalidate(area Rectangle) {
-	if !area.Clip(Rectangle{Size: getSize(w, &w.size)}) {
+	if !area.Clip(Rectangle{Size: w.size}) {
 		return
 	}
 
@@ -1444,7 +1358,7 @@ func (w *Window) Invalidate(area Rectangle) {
 
 // InvalidateClientArea marks an area of the client area for repaint.
 func (w *Window) InvalidateClientArea(area Rectangle) {
-	if !area.Clip(getRectangle(w, &w.clientArea)) {
+	if !area.Clip(w.clientArea) {
 		return
 	}
 
@@ -1464,34 +1378,10 @@ func (w *Window) InvalidateClientArea(area Rectangle) {
 	w.endUpdate()
 }
 
-// Lock will acquire an exclusive lock of w or of the Application instance if w
-// is nil. Lock is intended only for the various OnSet* handlers to protect the
-// statement when setting a particular property value. Example:
-//
-//	func onSetFocus(w *wm.Window, prev wm.OnSetBoolHandler, dst *bool, src bool) {
-//		if prev != nil {
-//			prev(w, nil, dst, src)
-//		} else {
-//			w.Lock()
-//			*dst = src
-//			w.Unlock()
-//		}
-//	}
-func (w *Window) Lock() {
-	if w != nil {
-		w.mu.Lock()
-		return
-	}
-
-	app.mu.Lock()
-}
-
 // NewChild creates a child window.
 func (w *Window) NewChild(area Rectangle) *Window {
-	c := newWindow(getDesktop(w, &w.desktop), w, app.ChildWindowStyle())
-	w.mu.Lock()
+	c := newWindow(w.desktop, w, app.ChildWindowStyle())
 	w.children = append(w.children, c)
-	w.mu.Unlock()
 	c.SetBorderTop(1)
 	c.SetBorderLeft(1)
 	c.SetBorderRight(1)
@@ -1795,7 +1685,7 @@ func (w *Window) OnSetTitle(h OnSetStringHandler, finalize func()) {
 //	'\n'	x, y = 0, y+1
 //	'\r'	x, y = 0, y
 func (w *Window) Printf(x, y int, style Style, format string, arg ...interface{}) {
-	if paintArea := getRectangle(w, &w.paintArea); paintArea.IsZero() { // Zero sized window or not in OnPaint.
+	if w.paintArea.IsZero() { // Zero sized window or not in OnPaint.
 		return
 	}
 
@@ -1803,10 +1693,10 @@ func (w *Window) Printf(x, y int, style Style, format string, arg ...interface{}
 }
 
 // Parent returns the window's parent. Root windows have nil parent.
-func (w *Window) Parent() *Window { return getWindow(w, &w.parent) }
+func (w *Window) Parent() *Window { return w.parent }
 
 // Position returns the window position relative to its parent.
-func (w *Window) Position() Position { return getPosition(w, &w.position) }
+func (w *Window) Position() Position { return w.position }
 
 // RemoveOnClick undoes the most recent OnClick call. The function will panic if
 // there is no handler set.
@@ -1955,7 +1845,7 @@ func (w *Window) SetClientSize(s Size) { w.onSetSize.handle(w, &w.clientArea.Siz
 
 // SetCloseButton sets whether the window shows a close button.
 func (w *Window) SetCloseButton(v bool) {
-	if getWindow(w, &w.parent) != nil {
+	if w.parent != nil {
 		w.onSetCloseButton.handle(w, &w.closeButton, v)
 	}
 }
@@ -1965,14 +1855,14 @@ func (w *Window) SetFocus(v bool) { w.onSetFocus.handle(w, &w.focus, v) }
 
 // SetPosition sets the window position relative to its parent.
 func (w *Window) SetPosition(p Position) {
-	if getWindow(w, &w.parent) != nil {
+	if w.parent != nil {
 		w.onSetPosition.handle(w, &w.position, p)
 	}
 }
 
 // SetSize sets the window size.
 func (w *Window) SetSize(s Size) {
-	if getWindow(w, &w.parent) != nil {
+	if w.parent != nil {
 		w.setSize(s)
 	}
 }
@@ -1984,20 +1874,10 @@ func (w *Window) SetStyle(s WindowStyle) { w.onSetStyle.handle(w, &w.style, s) }
 func (w *Window) SetTitle(s string) { w.onSetTitle.handle(w, &w.title, s) }
 
 // Size returns the window size.
-func (w *Window) Size() Size { return getSize(w, &w.size) }
+func (w *Window) Size() Size { return w.size }
 
 // Style returns the window style.
-func (w *Window) Style() WindowStyle { return getWindowStyle(w, &w.style) }
+func (w *Window) Style() WindowStyle { return w.style }
 
 // Title returns the window title.
-func (w *Window) Title() string { return getString(w, &w.title) }
-
-// Unlock will unlock w.
-func (w *Window) Unlock() {
-	if w != nil {
-		w.mu.Unlock()
-		return
-	}
-
-	app.mu.Unlock()
-}
+func (w *Window) Title() string { return w.title }

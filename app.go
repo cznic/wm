@@ -3,6 +3,13 @@
 // license that can be found in the LICENSE file.
 
 // Package wm is a terminal window manager.
+//
+// Changelog
+//
+// 2015-12-11: WM now uses no locks and renders 2 to 3 times faster. The price
+// is that any methods of Application, Desktop or Window must be called only
+// from a function that was enqueued by Application.Post or
+// Application.PostWait.
 package wm
 
 import (
@@ -26,9 +33,8 @@ var (
 
 // Application represents an interactive terminal application.
 //
-// All exported methods of an Application are safe for concurrent access by
-// multiple goroutines. However, concurrent calls of Application methods that
-// mutate its state may produce flicker or corrupted screen rendering.
+// Application methods must be called only from a function that was enqueued
+// using Application.Post or Application.PostWait.
 type Application struct {
 	click             time.Duration             //
 	desktop           *Desktop                  //
@@ -37,7 +43,6 @@ type Application struct {
 	mouseButtonsState tcell.ButtonMask          //
 	mouseX            int                       //
 	mouseY            int                       //
-	mu                sync.Mutex                //
 	onKey             *onKeyHandlerList         //
 	onSetClick        *onSetDurationHandlerList //
 	onSetDesktop      *onSetDesktopHandlerList  //
@@ -62,13 +67,16 @@ type Application struct {
 //			log.Fatalf("error: %v", err)
 //		}
 //
-//		defer app.Finalize()
+//		defer func() {
+//			app.Finalize()
+//			if err != nil {
+//				log.Fatalf("error: %v", err)
+//			}
+//		}
 //
 //		...
 //
-//		if err := app.Wait(); err != nil {
-//			log.Println("error: %v", err)
-//		}
+//		err = app.Wait()
 //	}
 //
 // Calling this function more than once will panic.
@@ -286,11 +294,11 @@ func (a *Application) setCell(x, y int, mainc rune, combc []rune, style tcell.St
 // ----------------------------------------------------------------------------
 
 // ChildWindowStyle returns the style assigned to new child windows.
-func (a *Application) ChildWindowStyle() WindowStyle { return getWindowStyle(nil, &a.theme.ChildWindow) }
+func (a *Application) ChildWindowStyle() WindowStyle { return a.theme.ChildWindow }
 
 // ClickDuration returns the maximum duration of a single click. Holding a
 // mouse button for any longer duration generates a drag event instead.
-func (a *Application) ClickDuration() time.Duration { return getDuration(nil, &a.click) }
+func (a *Application) ClickDuration() time.Duration { return a.click }
 
 // Colors returns the number of colors the host terminal supports.  All colors
 // are assumed to use the ANSI color map.  If a terminal is monochrome, it will
@@ -298,20 +306,19 @@ func (a *Application) ClickDuration() time.Duration { return getDuration(nil, &a
 func (a *Application) Colors() int { return a.screen.Colors() }
 
 // Desktop returns the currently active desktop.
-func (a *Application) Desktop() (d *Desktop) { return getDesktop(nil, &a.desktop) }
+func (a *Application) Desktop() (d *Desktop) { return a.desktop }
 
 // DesktopStyle returns the style assigned to new desktops.
-func (a *Application) DesktopStyle() WindowStyle { return getWindowStyle(nil, &a.theme.Desktop) }
+func (a *Application) DesktopStyle() WindowStyle { return a.theme.Desktop }
 
 // DoubleClickDuration returns the maximum duration of a double click. Mouse
 // click not followed by another one within the DoubleClickDuration is a single
 // click.
-func (a *Application) DoubleClickDuration() time.Duration { return getDuration(nil, &a.doubleClick) }
+func (a *Application) DoubleClickDuration() time.Duration { return a.doubleClick }
 
 // Exit terminates the interactive terminal application and returns err from
 // Wait(). Calling this method more than once will panic.
 func (a *Application) Exit(err error) {
-	a.mu.Lock()
 	if a.terminated {
 		panic("Application.Exit called more than once")
 	}
@@ -319,13 +326,12 @@ func (a *Application) Exit(err error) {
 	a.Finalize()
 	a.terminated = true
 	a.wait <- err
-	a.mu.Unlock()
 }
 
 // Finalize should be called when main exits to restore the normal terminal
 // state.
 //
-// Calling this method more than once will panic.
+// Calling this method more than once may panic.
 func (a *Application) Finalize() {
 	if a.terminated {
 		return
@@ -429,7 +435,7 @@ func (a *Application) SetDoubleClickDuration(d time.Duration) {
 func (a *Application) setSize(s Size) { a.onSetSize.handle(nil, &a.size, s) }
 
 // Size returns the size of the terminal the application runs in.
-func (a *Application) Size() (s Size) { return getSize(nil, &a.size) }
+func (a *Application) Size() (s Size) { return a.size }
 
 // Sync updates every character cell of the application screen.
 func (a *Application) Sync() { a.screen.Sync() }
