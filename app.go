@@ -39,6 +39,7 @@ type Application struct {
 	click             time.Duration             //
 	desktop           *Desktop                  //
 	doubleClick       time.Duration             //
+	exitError         error                     //
 	mouseButtonFSMs   [8]*mouseButtonFSM        //
 	mouseButtonsState tcell.ButtonMask          //
 	mouseX            int                       //
@@ -48,11 +49,11 @@ type Application struct {
 	onSetDesktop      *onSetDesktopHandlerList  //
 	onSetDoubleClick  *onSetDurationHandlerList //
 	onSetSize         *onSetSizeHandlerList     //
+	onceExit          sync.Once                 //
 	onceFinalize      sync.Once                 //
 	onceWait          sync.Once                 //
 	screen            tcell.Screen              //
 	size              Size                      //
-	terminated        bool                      // quitMessage processed
 	theme             *Theme                    //
 	updateLevel       int32                     //
 	wait              chan error                //
@@ -68,15 +69,18 @@ type Application struct {
 //		}
 //
 //		defer func() {
-//			app.Finalize()
-//			if err != nil {
-//				log.Fatalf("error: %v", err)
-//			}
-//		}
+//			app.PostWait(func() {
+//				if err := app.Finalize(); err != nil {
+//					log.Fatal(err)
+//				}
+//			})
+//		}()
 //
 //		...
 //
-//		err = app.Wait()
+//		if err = app.Wait(); err != nil {
+//			log.Fatal(err)
+//		}
 //	}
 //
 // Calling this function more than once will panic.
@@ -134,6 +138,13 @@ func newApplication(screen tcell.Screen, t *Theme) (*Application, error) {
 }
 
 func (a *Application) handleEvents() {
+	defer func() {
+		if err := recover(); err != nil {
+			a.Finalize()
+			a.Exit(fmt.Errorf("%v", err))
+		}
+	}()
+
 	for {
 		ev := a.screen.PollEvent()
 		if ev == nil {
@@ -317,34 +328,18 @@ func (a *Application) DesktopStyle() WindowStyle { return a.theme.Desktop }
 func (a *Application) DoubleClickDuration() time.Duration { return a.doubleClick }
 
 // Exit terminates the interactive terminal application and returns err from
-// Wait(). Calling this method more than once will panic.
+// Wait(). Only the first call of this method is considered.
 func (a *Application) Exit(err error) {
-	if a.terminated {
-		panic("Application.Exit called more than once")
-	}
-
 	a.Finalize()
-	a.terminated = true
-	a.wait <- err
+	a.onceExit.Do(func() { a.wait <- err })
 }
 
 // Finalize should be called when main exits to restore the normal terminal
-// state.
-//
-// Calling this method more than once may panic.
-func (a *Application) Finalize() {
-	if a.terminated {
-		return
-	}
-
-	done := false
-	a.onceFinalize.Do(func() {
-		a.screen.Fini()
-		done = true
-	})
-	if !done {
-		panic("Application.Finalize called more than once")
-	}
+// state. Finalize returns the error set by Application.Wait or an recovered error
+// when a panic occured.
+func (a *Application) Finalize() error {
+	a.onceFinalize.Do(func() { a.screen.Fini() })
+	return a.exitError
 }
 
 // NewDesktop returns a newly created desktop.
@@ -444,15 +439,7 @@ func (a *Application) Sync() { a.screen.Sync() }
 //
 // Calling this method more than once will panic.
 func (a *Application) Wait() error {
-	done := false
-	var err error
-	a.onceWait.Do(func() {
-		err = <-a.wait
-		done = true
-	})
-	if !done {
-		panic("Application.Wait called more than once")
-	}
-
+	err := a.exitError
+	a.onceWait.Do(func() { err = <-a.wait })
 	return err
 }
