@@ -9,10 +9,6 @@ import (
 	"sync"
 )
 
-const (
-	msgBufferSize = 100
-)
-
 var (
 	app                *Application
 	onceNewApplication sync.Once
