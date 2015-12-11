@@ -155,14 +155,6 @@ func main() {
 		log.Fatal(err)
 	}
 
-	defer func() {
-		app.PostWait(func() {
-			if err := app.Finalize(); err != nil {
-				log.Fatal(err)
-			}
-		})
-	}()
-
 	var r *wm.Window
 	var renderedIn time.Duration
 	app.PostWait(func() {

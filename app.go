@@ -68,14 +68,6 @@ type Application struct {
 //			log.Fatalf("error: %v", err)
 //		}
 //
-//		defer func() {
-//			app.PostWait(func() {
-//				if err := app.Finalize(); err != nil {
-//					log.Fatal(err)
-//				}
-//			})
-//		}()
-//
 //		...
 //
 //		if err = app.Wait(); err != nil {
@@ -140,7 +132,7 @@ func newApplication(screen tcell.Screen, t *Theme) (*Application, error) {
 func (a *Application) handleEvents() {
 	defer func() {
 		if err := recover(); err != nil {
-			a.Finalize()
+			a.finalize()
 			a.Exit(fmt.Errorf("%v", err))
 		}
 	}()
@@ -302,6 +294,8 @@ func (a *Application) setCell(x, y int, mainc rune, combc []rune, style tcell.St
 	a.screen.SetContent(x, y, mainc, combc, style)
 }
 
+func (a *Application) finalize() { a.onceFinalize.Do(func() { a.screen.Fini() }) }
+
 // ----------------------------------------------------------------------------
 
 // ChildWindowStyle returns the style assigned to new child windows.
@@ -330,16 +324,8 @@ func (a *Application) DoubleClickDuration() time.Duration { return a.doubleClick
 // Exit terminates the interactive terminal application and returns err from
 // Wait(). Only the first call of this method is considered.
 func (a *Application) Exit(err error) {
-	a.Finalize()
+	a.finalize()
 	a.onceExit.Do(func() { a.wait <- err })
-}
-
-// Finalize should be called when main exits to restore the normal terminal
-// state. Finalize returns the error set by Application.Wait or an recovered error
-// when a panic occured.
-func (a *Application) Finalize() error {
-	a.onceFinalize.Do(func() { a.screen.Fini() })
-	return a.exitError
 }
 
 // NewDesktop returns a newly created desktop.
