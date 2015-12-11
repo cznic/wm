@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
+// Package wm is a terminal window manager.
 package wm
 
 import (
@@ -16,6 +17,11 @@ import (
 
 const (
 	anyButton = tcell.Button8<<1 - 1
+)
+
+var (
+	app                *Application
+	onceNewApplication sync.Once
 )
 
 // Application represents an interactive terminal application.
