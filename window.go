@@ -937,23 +937,22 @@ func (w *Window) setPaintContext(area Rectangle, origin Position) (oldArea Recta
 	return oldArea, oldPosition
 }
 
-func (w *Window) click(button tcell.ButtonMask, pos Position, mods tcell.ModMask) {
-	screenPos := pos
+func (w *Window) event(winPos Position, clientAreaHandler, borderHandler func(*Window, Position)) {
 search:
 	clArea := w.ClientArea()
-	if pos.In(clArea) {
-		pos.X -= clArea.X
-		pos.Y -= clArea.Y
+	if winPos.In(clArea) {
+		winPos.X -= clArea.X
+		winPos.Y -= clArea.Y
 		w.Lock()
 		var chArea Rectangle
 		for i := len(w.children) - 1; i >= 0; i-- {
 			ch := w.children[i]
 			chArea = ch.Area()
 			chArea.Position = ch.Position()
-			if pos.In(chArea) {
+			if winPos.In(chArea) {
 				w.mu.Unlock()
-				pos.X -= chArea.X
-				pos.Y -= chArea.Y
+				winPos.X -= chArea.X
+				winPos.Y -= chArea.Y
 				w = ch
 				goto search
 			}
@@ -962,75 +961,47 @@ search:
 		w.mu.Unlock()
 		w.BringToFront()
 		w.SetFocus(true)
-		w.onClick.handle(w, button, screenPos, pos, mods)
+		clientAreaHandler(w, winPos)
 		return
 	}
 
-	w.onClickBorder.handle(w, button, screenPos, pos, mods)
+	borderHandler(w, winPos)
+}
+
+func (w *Window) click(button tcell.ButtonMask, pos Position, mods tcell.ModMask) {
+	w.event(
+		pos,
+		func(w *Window, winPos Position) {
+			w.onClick.handle(w, button, pos, winPos, mods)
+		},
+		func(w *Window, winPos Position) {
+			w.onClickBorder.handle(w, button, pos, winPos, mods)
+		},
+	)
 }
 
 func (w *Window) doubleClick(button tcell.ButtonMask, pos Position, mods tcell.ModMask) {
-	screenPos := pos
-search:
-	clArea := w.ClientArea()
-	if pos.In(clArea) {
-		pos.X -= clArea.X
-		pos.Y -= clArea.Y
-		w.Lock()
-		var chArea Rectangle
-		for i := len(w.children) - 1; i >= 0; i-- {
-			ch := w.children[i]
-			chArea = ch.Area()
-			chArea.Position = ch.Position()
-			if pos.In(chArea) {
-				w.mu.Unlock()
-				pos.X -= chArea.X
-				pos.Y -= chArea.Y
-				w = ch
-				goto search
-			}
-		}
-
-		w.mu.Unlock()
-		w.BringToFront()
-		w.SetFocus(true)
-		w.onDoubleClick.handle(w, button, screenPos, pos, mods)
-		return
-	}
-
-	w.onDoubleClickBorder.handle(w, button, screenPos, pos, mods)
+	w.event(
+		pos,
+		func(w *Window, winPos Position) {
+			w.onDoubleClick.handle(w, button, pos, winPos, mods)
+		},
+		func(w *Window, winPos Position) {
+			w.onDoubleClickBorder.handle(w, button, pos, winPos, mods)
+		},
+	)
 }
 
 func (w *Window) drag(button tcell.ButtonMask, pos Position, mods tcell.ModMask) {
-	screenPos := pos
-search:
-	clArea := w.ClientArea()
-	if pos.In(clArea) {
-		pos.X -= clArea.X
-		pos.Y -= clArea.Y
-		w.Lock()
-		var chArea Rectangle
-		for i := len(w.children) - 1; i >= 0; i-- {
-			ch := w.children[i]
-			chArea = ch.Area()
-			chArea.Position = ch.Position()
-			if pos.In(chArea) {
-				w.mu.Unlock()
-				pos.X -= chArea.X
-				pos.Y -= chArea.Y
-				w = ch
-				goto search
-			}
-		}
-
-		w.mu.Unlock()
-		w.BringToFront()
-		w.SetFocus(true)
-		w.onDrag.handle(w, button, screenPos, pos, mods)
-		return
-	}
-
-	w.onDragBorder.handle(w, button, screenPos, pos, mods)
+	w.event(
+		pos,
+		func(w *Window, winPos Position) {
+			w.onDrag.handle(w, button, pos, winPos, mods)
+		},
+		func(w *Window, winPos Position) {
+			w.onDragBorder.handle(w, button, pos, winPos, mods)
+		},
+	)
 }
 func (w *Window) drop(button tcell.ButtonMask, pos Position, mods tcell.ModMask) {
 	w.onDrop.handle(w, button, pos, pos, mods)
