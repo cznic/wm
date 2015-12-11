@@ -1329,7 +1329,7 @@ func (w *Window) BorderTopArea() (r Rectangle) {
 }
 
 // BringToFront puts a child window on top of all its siblings. The method has
-// no effect if w is a root window or if w is docked.
+// no effect if w is a root window.
 func (w *Window) BringToFront() { w.Parent().bringToFront(w) }
 
 // Child returns the nth child window or nil if no such exists.
