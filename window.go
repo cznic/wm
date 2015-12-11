@@ -1376,9 +1376,12 @@ func (w *Window) Close() {
 
 	w.onClearBorders.clear()
 	w.onClick.clear()
+	w.onClickBorder.clear()
 	w.onClose.clear()
 	w.onDoubleClick.clear()
+	w.onDoubleClickBorder.clear()
 	w.onDrag.clear()
+	w.onDragBorder.clear()
 	w.onDrop.clear()
 	w.onKey.clear()
 	w.onMouseMove.clear()
