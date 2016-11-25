@@ -18,7 +18,7 @@ const (
 )
 
 const (
-	_ = iota
+	_ = iota //TODOOK
 	dragPos
 	dragRightSize
 	dragLeftSize
@@ -42,6 +42,7 @@ type Window struct {
 	children             []*Window                    // In z-order.
 	clientArea           Rectangle                    //
 	closeButton          bool                         //
+	ctx                  PaintContext                 // Valid during painting.
 	desktop              *Desktop                     //
 	dragScreenPos0       Position                     // Mouse screen position on drag event.
 	dragState            int                          //
@@ -49,7 +50,8 @@ type Window struct {
 	dragWinSize0         Size                         // Window size on drag event.
 	focus                bool                         //
 	focusedWindow        *Window                      // Root window only.
-	onClearBorders       *onPaintHandlerList          //
+	onClearBorders       *OnPaintHandlerList          //
+	onClearClientArea    *OnPaintHandlerList          //
 	onClick              *onMouseHandlerList          //
 	onClickBorder        *onMouseHandlerList          //
 	onClose              *onCloseHandlerList          //
@@ -60,36 +62,36 @@ type Window struct {
 	onDrop               *onMouseHandlerList          //
 	onKey                *onKeyHandlerList            //
 	onMouseMove          *onMouseHandlerList          //
-	onPaintBorderBottom  *onPaintHandlerList          //
-	onPaintBorderLeft    *onPaintHandlerList          //
-	onPaintBorderRight   *onPaintHandlerList          //
-	onPaintBorderTop     *onPaintHandlerList          //
-	onPaintChildren      *onPaintHandlerList          //
-	onPaintClientArea    *onPaintHandlerList          //
-	onPaintTitle         *onPaintHandlerList          //
-	onSetBorderBotom     *onSetIntHandlerList         //
-	onSetBorderLeft      *onSetIntHandlerList         //
-	onSetBorderRight     *onSetIntHandlerList         //
-	onSetBorderStyle     *onSetStyleHandlerList       //
-	onSetBorderTop       *onSetIntHandlerList         //
-	onSetClientAreaStyle *onSetStyleHandlerList       //
-	onSetClientSize      *onSetSizeHandlerList        //
+	onPaintBorderBottom  *OnPaintHandlerList          //
+	onPaintBorderLeft    *OnPaintHandlerList          //
+	onPaintBorderRight   *OnPaintHandlerList          //
+	onPaintBorderTop     *OnPaintHandlerList          //
+	onPaintChildren      *OnPaintHandlerList          //
+	onPaintClientArea    *OnPaintHandlerList          //
+	onPaintTitle         *OnPaintHandlerList          //
+	onSetBorderBotom     *OnSetIntHandlerList         //
+	onSetBorderLeft      *OnSetIntHandlerList         //
+	onSetBorderRight     *OnSetIntHandlerList         //
+	onSetBorderStyle     *OnSetStyleHandlerList       //
+	onSetBorderTop       *OnSetIntHandlerList         //
+	onSetClientAreaStyle *OnSetStyleHandlerList       //
+	onSetClientSize      *OnSetSizeHandlerList        //
 	onSetCloseButton     *onSetBoolHandlerList        //
 	onSetFocus           *onSetBoolHandlerList        //
 	onSetFocusedWindow   *onSetWindowHandlerList      // Root window only.
-	onSetPosition        *onSetPositionHandlerList    //
+	onSetOrigin          *OnSetPositionHandlerList    //
+	onSetPosition        *OnSetPositionHandlerList    //
 	onSetSelection       *onSetRectangleHandlerList   // Root window only.
-	onSetSize            *onSetSizeHandlerList        //
+	onSetSize            *OnSetSizeHandlerList        //
 	onSetStyle           *onSetWindowStyleHandlerList //
 	onSetTitle           *onSetStringHandlerList      //
-	paintArea            Rectangle                    // Valid during painting.
-	paintOrigin          Position                     // Valid during painting.
 	parent               *Window                      //
 	position             Position                     //
 	selection            Rectangle                    // Root window only.
 	size                 Size                         //
 	style                WindowStyle                  //
 	title                string                       //
+	view                 Position                     //
 }
 
 func newWindow(desktop *Desktop, parent *Window, style WindowStyle) *Window {
@@ -98,15 +100,15 @@ func newWindow(desktop *Desktop, parent *Window, style WindowStyle) *Window {
 		parent:  parent,
 		style:   style,
 	}
-	addOnPaintHandler(w, &w.onClearBorders, w.onClearBordersHandler, nil)
-	addOnPaintHandler(w, &w.onPaintChildren, w.onPaintChildrenHandler, nil)
+	AddOnPaintHandler(&w.onClearBorders, w.onClearBordersHandler, nil)
+	AddOnPaintHandler(&w.onClearClientArea, w.onClearClientAreaHandler, nil)
+	AddOnPaintHandler(&w.onPaintChildren, w.onPaintChildrenHandler, nil)
 	w.OnClickBorder(w.onClickBorderHandler, nil)
 	w.OnDragBorder(w.onDragBorderHandler, nil)
 	w.OnPaintBorderBottom(w.onPaintBorderBottomHandler, nil)
 	w.OnPaintBorderLeft(w.onPaintBorderLeftHandler, nil)
 	w.OnPaintBorderRight(w.onPaintBorderRightHandler, nil)
 	w.OnPaintBorderTop(w.onPaintBorderTopHandler, nil)
-	w.OnPaintClientArea(w.onPaintClientAreaHandler, nil)
 	w.OnPaintTitle(w.onPaintTitleHandler, nil)
 	w.OnSetBorderBottom(w.onSetBorderBottomHandler, nil)
 	w.OnSetBorderLeft(w.onSetBorderLeftHandler, nil)
@@ -117,6 +119,7 @@ func newWindow(desktop *Desktop, parent *Window, style WindowStyle) *Window {
 	w.OnSetClientSize(w.onSetClientSizeHandler, nil)
 	w.OnSetCloseButton(w.onSetCloseButtonHandler, nil)
 	w.OnSetFocus(w.onSetFocusHandler, nil)
+	w.OnSetOrigin(w.onSetOriginHandler, nil)
 	w.OnSetPosition(w.onSetPositionHandler, nil)
 	w.OnSetSize(w.onSetSizeHandler, nil)
 	w.OnSetStyle(w.onSetStyleHandler, nil)
@@ -124,25 +127,21 @@ func newWindow(desktop *Desktop, parent *Window, style WindowStyle) *Window {
 	return w
 }
 
-func (w *Window) setCell(x, y int, mainc rune, combc []rune, style tcell.Style) {
-	o := w.position
-	paintArea := w.paintArea
-	paintOrigin := w.paintOrigin
-	o.X += paintOrigin.X
-	o.Y += paintOrigin.Y
-	if !(Position{paintOrigin.X + x, paintOrigin.Y + y}).In(paintArea) {
+func (w *Window) setCell(p Position, mainc rune, combc []rune, style tcell.Style) {
+	if !w.ctx.origin.add(p).In(w.ctx.area) {
 		return
 	}
 
-	switch p := w.Parent(); p {
+	p = p.add(w.position).add(w.ctx.origin).sub(w.ctx.view)
+	switch w := w.Parent(); w {
 	case nil:
-		app.setCell(o.X+x, o.Y+y, mainc, combc, style)
+		app.setCell(p, mainc, combc, style)
 	default:
-		p.setCell(o.X+x, o.Y+y, mainc, combc, style)
+		w.setCell(p, mainc, combc, style)
 	}
 }
 
-func (w *Window) onPaintTitleHandler(_ *Window, prev OnPaintHandler, ctx PaintContext) {
+func (w *Window) onPaintTitleHandler(_ *Window, prev OnPaintHandler, _ PaintContext) {
 	if prev != nil {
 		panic("internal error")
 	}
@@ -271,21 +270,21 @@ func (w *Window) onClearBordersHandler(_ *Window, prev OnPaintHandler, ctx Paint
 	}
 
 	style := w.Style().Border.TCellStyle()
-	if a := w.BorderTopArea(); a.Clip(ctx.Rectangle) {
+	if a := w.BorderTopArea(); a.Clip(ctx.area) {
 		w.clear(a, style)
 	}
-	if a := w.BorderLeftArea(); a.Clip(ctx.Rectangle) {
+	if a := w.BorderLeftArea(); a.Clip(ctx.area) {
 		w.clear(a, style)
 	}
-	if a := w.BorderRightArea(); a.Clip(ctx.Rectangle) {
+	if a := w.BorderRightArea(); a.Clip(ctx.area) {
 		w.clear(a, style)
 	}
-	if a := w.BorderBottomArea(); a.Clip(ctx.Rectangle) {
+	if a := w.BorderBottomArea(); a.Clip(ctx.area) {
 		w.clear(a, style)
 	}
 }
 
-func (w *Window) onPaintBorderTopHandler(_ *Window, prev OnPaintHandler, ctx PaintContext) {
+func (w *Window) onPaintBorderTopHandler(_ *Window, prev OnPaintHandler, _ PaintContext) {
 	if prev != nil {
 		panic("internal error")
 	}
@@ -323,7 +322,7 @@ func (w *Window) onPaintBorderTopHandler(_ *Window, prev OnPaintHandler, ctx Pai
 	}
 }
 
-func (w *Window) onPaintBorderLeftHandler(_ *Window, prev OnPaintHandler, ctx PaintContext) {
+func (w *Window) onPaintBorderLeftHandler(_ *Window, prev OnPaintHandler, _ PaintContext) {
 	if prev != nil {
 		panic("internal error")
 	}
@@ -356,7 +355,7 @@ func (w *Window) onPaintBorderLeftHandler(_ *Window, prev OnPaintHandler, ctx Pa
 	}
 }
 
-func (w *Window) onPaintBorderRightHandler(_ *Window, prev OnPaintHandler, ctx PaintContext) {
+func (w *Window) onPaintBorderRightHandler(_ *Window, prev OnPaintHandler, _ PaintContext) {
 	if prev != nil {
 		panic("internal error")
 	}
@@ -390,7 +389,7 @@ func (w *Window) onPaintBorderRightHandler(_ *Window, prev OnPaintHandler, ctx P
 	}
 }
 
-func (w *Window) onPaintBorderBottomHandler(_ *Window, prev OnPaintHandler, ctx PaintContext) {
+func (w *Window) onPaintBorderBottomHandler(_ *Window, prev OnPaintHandler, _ PaintContext) {
 	if prev != nil {
 		panic("internal error")
 	}
@@ -511,15 +510,12 @@ func (w *Window) clear(area Rectangle, style tcell.Style) {
 	}
 }
 
-func (w *Window) onPaintClientAreaHandler(_ *Window, prev OnPaintHandler, ctx PaintContext) {
+func (w *Window) onClearClientAreaHandler(_ *Window, prev OnPaintHandler, ctx PaintContext) {
 	if prev != nil {
 		panic("internal error")
 	}
 
-	r := ctx.Rectangle
-	r.X -= ctx.origin.X
-	r.Y -= ctx.origin.Y
-	w.clear(r, w.Style().ClientArea.TCellStyle())
+	w.clear(Rectangle{ctx.area.sub(ctx.origin), ctx.area.Size}, w.Style().ClientArea.TCellStyle())
 }
 
 func (w *Window) onPaintChildrenHandler(_ *Window, prev OnPaintHandler, ctx PaintContext) {
@@ -534,15 +530,20 @@ func (w *Window) onPaintChildrenHandler(_ *Window, prev OnPaintHandler, ctx Pain
 			break
 		}
 
-		chPos := c.Position()
-		chPos.X += clPos.X
-		chPos.Y += clPos.Y
-		if area := (Rectangle{chPos, c.Size()}); area.Clip(ctx.Rectangle) {
-			area.X -= chPos.X
-			area.Y -= chPos.Y
-			c.paint(area)
+		chPos := c.Position().add(clPos)
+		if area := (Rectangle{chPos, c.Size()}); area.Clip(ctx.area) {
+			c.paint(Rectangle{area.sub(chPos), area.Size})
 		}
 	}
+}
+
+func (w *Window) onSetOriginHandler(_ *Window, prev OnSetPositionHandler, dst *Position, src Position) {
+	if prev != nil {
+		panic("internal error")
+	}
+
+	*dst = src
+	w.InvalidateClientArea(w.ClientArea())
 }
 
 func (w *Window) onSetPositionHandler(_ *Window, prev OnSetPositionHandler, dst *Position, src Position) {
@@ -563,13 +564,13 @@ func (w *Window) onSetSizeHandler(_ *Window, prev OnSetSizeHandler, dst *Size, s
 	src.Width = mathutil.Max(0, src.Width)
 	src.Height = mathutil.Max(0, src.Height)
 	*dst = src
-	sz := Size{
-		mathutil.Max(0, w.size.Width-(w.borderLeft+w.borderRight)),
-		mathutil.Max(0, w.size.Height-(w.borderTop+w.borderBottom)),
+	csz := Size{
+		mathutil.Max(0, src.Width-(w.borderLeft+w.borderRight)),
+		mathutil.Max(0, src.Height-(w.borderTop+w.borderBottom)),
 	}
 	p := w.parent
 
-	w.SetClientSize(sz)
+	w.SetClientSize(csz)
 	if p != nil {
 		p.InvalidateClientArea(p.ClientArea())
 		return
@@ -583,15 +584,16 @@ func (w *Window) onSetClientSizeHandler(_ *Window, prev OnSetSizeHandler, dst *S
 		panic("internal error")
 	}
 
-	src.Width = mathutil.Min(mathutil.Max(0, src.Width), w.size.Width-(w.borderLeft+w.borderRight))
-	src.Height = mathutil.Min(mathutil.Max(0, src.Height), w.size.Height-(w.borderTop+w.borderBottom))
-	sz := Size{
+	src.Width = mathutil.Max(0, src.Width)
+	src.Height = mathutil.Max(0, src.Height)
+	*dst = src
+	wsz := Size{
 		w.borderLeft + src.Width + w.borderRight,
 		w.borderTop + src.Height + w.borderBottom,
 	}
 	p := w.parent
 
-	w.SetSize(sz)
+	w.SetSize(wsz)
 	if p != nil {
 		p.InvalidateClientArea(p.ClientArea())
 		return
@@ -705,30 +707,21 @@ func (w *Window) endUpdate() {
 }
 
 // setSize sets the window size.
-func (w *Window) setSize(s Size) { w.onSetSize.handle(w, &w.size, s) }
-
-func (w *Window) setPaintContext(area Rectangle, origin Position) (oldArea Rectangle, oldPosition Position) {
-	oldArea = w.paintArea
-	oldPosition = w.paintOrigin
-	w.paintArea = area
-	w.paintOrigin = origin
-	return oldArea, oldPosition
-}
+func (w *Window) setSize(s Size) { w.onSetSize.Handle(w, &w.size, s) }
 
 func (w *Window) event(winPos Position, clientAreaHandler, borderHandler func(*Window, Position), setFocus bool) {
 search:
+	winPos2 := winPos.add(w.view)
 	clArea := w.ClientArea()
 	if winPos.In(clArea) {
-		winPos.X -= clArea.X
-		winPos.Y -= clArea.Y
+		winPos = winPos2.sub(clArea.Position)
 		var chArea Rectangle
 		for i := len(w.children) - 1; i >= 0; i-- {
 			ch := w.children[i]
 			chArea = ch.Area()
 			chArea.Position = ch.Position()
 			if winPos.In(chArea) {
-				winPos.X -= chArea.X
-				winPos.Y -= chArea.Y
+				winPos = winPos.sub(chArea.Position)
 				w = ch
 				goto search
 			}
@@ -930,22 +923,19 @@ func (w *Window) paint(area Rectangle) {
 				return
 			}
 
-			o := w.Position()
-			cp := p.ClientPosition()
-			area.X += o.X + cp.X
-			area.Y += o.Y + cp.Y
+			area.Position = area.add(w.Position()).add(p.ClientPosition())
 			w = p
 		}
 	}
 
 	a0 := w.Area()
 	if a := a0; a.Clip(area) {
-		w.onClearBorders.handle(w, PaintContext{a, a0.Position})
+		w.onClearBorders.Handle(w, PaintContext{a, a0.Position, Position{}})
 	}
 
 	a0 = w.BorderTopArea()
 	if a := a0; a.Clip(area) {
-		w.onPaintBorderTop.handle(w, PaintContext{a, a0.Position})
+		w.onPaintBorderTop.Handle(w, PaintContext{a, a0.Position, Position{}})
 	}
 
 	if !a0.IsZero() && w.Title() != "" {
@@ -956,30 +946,37 @@ func (w *Window) paint(area Rectangle) {
 		}
 		a0.Height = 1
 		if a := a0; a.Clip(area) {
-			w.onPaintTitle.handle(w, PaintContext{a, a0.Position})
+			w.onPaintTitle.Handle(w, PaintContext{a, a0.Position, Position{}})
 		}
 	}
 
 	a0 = w.BorderLeftArea()
 	if a := a0; a.Clip(area) {
-		w.onPaintBorderLeft.handle(w, PaintContext{a, a0.Position})
+		w.onPaintBorderLeft.Handle(w, PaintContext{a, a0.Position, Position{}})
 	}
 
 	a0 = w.ClientArea()
 	if a := a0; a.Clip(area) {
-		ctx := PaintContext{a, a0.Position}
-		w.onPaintClientArea.handle(w, ctx)
-		w.onPaintChildren.handle(w, ctx)
+		ctx := PaintContext{a, a0.Position, Position{}}
+		w.onClearClientArea.Handle(w, ctx)
+	}
+
+	a0 = w.ClientArea()
+	if a := a0; a.Clip(area) {
+		a.Position = a.Position.add(w.view)
+		ctx := PaintContext{a, a0.Position, w.view}
+		w.onPaintClientArea.Handle(w, ctx)
+		w.onPaintChildren.Handle(w, ctx)
 	}
 
 	a0 = w.BorderRightArea()
 	if a := a0; a.Clip(area) {
-		w.onPaintBorderRight.handle(w, PaintContext{a, a0.Position})
+		w.onPaintBorderRight.Handle(w, PaintContext{a, a0.Position, Position{}})
 	}
 
 	a0 = w.BorderBottomArea()
 	if a := a0; a.Clip(area) {
-		w.onPaintBorderBottom.handle(w, PaintContext{a, a0.Position})
+		w.onPaintBorderBottom.Handle(w, PaintContext{a, a0.Position, Position{}})
 	}
 }
 
@@ -988,7 +985,7 @@ func (w *Window) print(x, y int, style tcell.Style, s string) {
 		return
 	}
 
-	if w.paintArea.IsZero() { // Zero sized window or not in OnPaint.
+	if w.ctx.area.IsZero() { // Zero sized window or not in OnPaint.
 		return
 	}
 
@@ -1150,7 +1147,7 @@ func (w *Window) bottomBorderDragResizeArea() (r Rectangle) {
 	if !r.IsZero() {
 		r.X++
 		r.Width -= 2
-		r.Y -= r.Height - 1
+		r.Y += r.Height - 1
 		r.Height = 1
 	}
 	return r
@@ -1253,9 +1250,10 @@ func (w *Window) BringToFront() { w.Parent().bringToFront(w) }
 // Child returns the nth child window or nil if no such exists.
 func (w *Window) Child(n int) (r *Window) {
 	if n < len(w.children) {
-		r = w.children[n]
+		return w.children[n]
 	}
-	return r
+
+	return nil
 }
 
 // Children returns the number of child windows.
@@ -1290,7 +1288,8 @@ func (w *Window) Close() {
 		p.InvalidateClientArea(p.ClientArea())
 	}
 
-	w.onClearBorders.clear()
+	w.onClearBorders.Clear()
+	w.onClearClientArea.Clear()
 	w.onClick.clear()
 	w.onClickBorder.clear()
 	w.onClose.clear()
@@ -1301,26 +1300,27 @@ func (w *Window) Close() {
 	w.onDrop.clear()
 	w.onKey.clear()
 	w.onMouseMove.clear()
-	w.onPaintBorderBottom.clear()
-	w.onPaintBorderLeft.clear()
-	w.onPaintBorderRight.clear()
-	w.onPaintBorderTop.clear()
-	w.onPaintChildren.clear()
-	w.onPaintClientArea.clear()
-	w.onPaintTitle.clear()
-	w.onSetBorderBotom.clear()
-	w.onSetBorderLeft.clear()
-	w.onSetBorderRight.clear()
-	w.onSetBorderStyle.clear()
-	w.onSetBorderTop.clear()
-	w.onSetClientAreaStyle.clear()
-	w.onSetClientSize.clear()
+	w.onPaintBorderBottom.Clear()
+	w.onPaintBorderLeft.Clear()
+	w.onPaintBorderRight.Clear()
+	w.onPaintBorderTop.Clear()
+	w.onPaintChildren.Clear()
+	w.onPaintClientArea.Clear()
+	w.onPaintTitle.Clear()
+	w.onSetBorderBotom.Clear()
+	w.onSetBorderLeft.Clear()
+	w.onSetBorderRight.Clear()
+	w.onSetBorderStyle.Clear()
+	w.onSetBorderTop.Clear()
+	w.onSetClientAreaStyle.Clear()
+	w.onSetClientSize.Clear()
 	w.onSetCloseButton.clear()
 	w.onSetFocus.clear()
 	w.onSetFocusedWindow.clear()
-	w.onSetPosition.clear()
+	w.onSetOrigin.Clear()
+	w.onSetPosition.Clear()
 	w.onSetSelection.clear()
-	w.onSetSize.clear()
+	w.onSetSize.Clear()
 	w.onSetStyle.clear()
 	w.onSetTitle.clear()
 }
@@ -1348,11 +1348,7 @@ func (w *Window) Invalidate(area Rectangle) {
 		return
 	}
 
-	o := w.Position()
-	cp := p.ClientPosition()
-	area.X += o.X + cp.X
-	area.Y += o.Y + cp.Y
-	p.paint(area)
+	p.paint(Rectangle{area.add(w.Position()).add(p.ClientPosition()), area.Size})
 	w.endUpdate()
 }
 
@@ -1370,11 +1366,7 @@ func (w *Window) InvalidateClientArea(area Rectangle) {
 		return
 	}
 
-	o := w.Position()
-	cp := p.ClientPosition()
-	area.X += o.X + cp.X
-	area.Y += o.Y + cp.Y
-	p.paint(area)
+	p.paint(Rectangle{area.add(w.Position()).add(p.ClientPosition()), area.Size})
 	w.endUpdate()
 }
 
@@ -1394,61 +1386,61 @@ func (w *Window) NewChild(area Rectangle) *Window {
 // OnClick sets a mouse click event handler. When the event handler is removed,
 // finalize is called, if not nil.
 func (w *Window) OnClick(h OnMouseHandler, finalize func()) {
-	addOnMouseHandler(w, &w.onClick, h, finalize)
+	addOnMouseHandler(&w.onClick, h, finalize)
 }
 
 // OnClickBorder sets a mouse click border event handler. When the event
 // handler is removed, finalize is called, if not nil.
 func (w *Window) OnClickBorder(h OnMouseHandler, finalize func()) {
-	addOnMouseHandler(w, &w.onClickBorder, h, finalize)
+	addOnMouseHandler(&w.onClickBorder, h, finalize)
 }
 
 // OnClose sets a window close event handler. When the event handler is
 // removed, finalize is called, if not nil.
 func (w *Window) OnClose(h OnCloseHandler, finalize func()) {
-	addOnCloseHandler(w, &w.onClose, h, finalize)
+	addOnCloseHandler(&w.onClose, h, finalize)
 }
 
 // OnDoubleClick sets a mouse double click event handler. When the event
 // handler is removed, finalize is called, if not nil.
 func (w *Window) OnDoubleClick(h OnMouseHandler, finalize func()) {
-	addOnMouseHandler(w, &w.onDoubleClick, h, finalize)
+	addOnMouseHandler(&w.onDoubleClick, h, finalize)
 }
 
 // OnDoubleClickBorder sets a mouse double click border event handler. When the
 // event handler is removed, finalize is called, if not nil.
 func (w *Window) OnDoubleClickBorder(h OnMouseHandler, finalize func()) {
-	addOnMouseHandler(w, &w.onDoubleClickBorder, h, finalize)
+	addOnMouseHandler(&w.onDoubleClickBorder, h, finalize)
 }
 
 // OnDrag sets a mouse drag event handler. When the event handler is removed,
 // finalize is called, if not nil.
 func (w *Window) OnDrag(h OnMouseHandler, finalize func()) {
-	addOnMouseHandler(w, &w.onDrag, h, finalize)
+	addOnMouseHandler(&w.onDrag, h, finalize)
 }
 
 // OnDragBorder sets a mouse drag border event handler. When the event handler
 // is removed, finalize is called, if not nil.
 func (w *Window) OnDragBorder(h OnMouseHandler, finalize func()) {
-	addOnMouseHandler(w, &w.onDragBorder, h, finalize)
+	addOnMouseHandler(&w.onDragBorder, h, finalize)
 }
 
 // OnDrop sets a mouse drop event handler. When the event handler is removed,
 // finalize is called, if not nil.
 func (w *Window) OnDrop(h OnMouseHandler, finalize func()) {
-	addOnMouseHandler(w, &w.onDrop, h, finalize)
+	addOnMouseHandler(&w.onDrop, h, finalize)
 }
 
 // OnKey sets a key event handler. When the event handler is removed, finalize
 // is called, if not nil.
 func (w *Window) OnKey(h OnKeyHandler, finalize func()) {
-	addOnKeyHandler(w, &w.onKey, h, finalize)
+	addOnKeyHandler(&w.onKey, h, finalize)
 }
 
 // OnMouseMove sets a mouse move event handler. When the event handler is
 // removed, finalize is called, if not nil.
 func (w *Window) OnMouseMove(h OnMouseHandler, finalize func()) {
-	addOnMouseHandler(w, &w.onMouseMove, h, finalize)
+	addOnMouseHandler(&w.onMouseMove, h, finalize)
 }
 
 // OnPaintClientArea sets a client area paint handler. When the event handler
@@ -1465,7 +1457,7 @@ func (w *Window) OnMouseMove(h OnMouseHandler, finalize func()) {
 //
 //	w.OnPaintClientArea(onPaintClientArea, nil)
 func (w *Window) OnPaintClientArea(h OnPaintHandler, finalize func()) {
-	addOnPaintHandler(w, &w.onPaintClientArea, h, finalize)
+	AddOnPaintHandler(&w.onPaintClientArea, h, finalize)
 }
 
 // OnPaintBorderBottom sets a bottom border paint handler. When the event
@@ -1496,7 +1488,7 @@ func (w *Window) OnPaintClientArea(h OnPaintHandler, finalize func()) {
 //	w.OnPaintBorderBottom(onPaintBorderBottom, nil)
 //	w.SetBorderBottom(1)
 func (w *Window) OnPaintBorderBottom(h OnPaintHandler, finalize func()) {
-	addOnPaintHandler(w, &w.onPaintBorderBottom, h, finalize)
+	AddOnPaintHandler(&w.onPaintBorderBottom, h, finalize)
 }
 
 // OnPaintBorderLeft sets a left border paint handler. When the event handler
@@ -1527,7 +1519,7 @@ func (w *Window) OnPaintBorderBottom(h OnPaintHandler, finalize func()) {
 //	w.OnPaintBorderLeft(onPaintBorderLeft, nil)
 //	w.SetBorderLeft(1)
 func (w *Window) OnPaintBorderLeft(h OnPaintHandler, finalize func()) {
-	addOnPaintHandler(w, &w.onPaintBorderLeft, h, finalize)
+	AddOnPaintHandler(&w.onPaintBorderLeft, h, finalize)
 }
 
 // OnPaintBorderRight sets a right border paint handler. When the event handler
@@ -1558,7 +1550,7 @@ func (w *Window) OnPaintBorderLeft(h OnPaintHandler, finalize func()) {
 //	w.OnPaintBorderRight(onPaintBorderRight, nil)
 //	w.SetBorderRight(1)
 func (w *Window) OnPaintBorderRight(h OnPaintHandler, finalize func()) {
-	addOnPaintHandler(w, &w.onPaintBorderRight, h, finalize)
+	AddOnPaintHandler(&w.onPaintBorderRight, h, finalize)
 }
 
 // OnPaintBorderTop sets a top border paint handler. When the event handler
@@ -1589,92 +1581,101 @@ func (w *Window) OnPaintBorderRight(h OnPaintHandler, finalize func()) {
 //	w.OnPaintBorderTop(onPaintBorderTop, nil)
 //	w.SetBorderTop(1)
 func (w *Window) OnPaintBorderTop(h OnPaintHandler, finalize func()) {
-	addOnPaintHandler(w, &w.onPaintBorderTop, h, finalize)
+	AddOnPaintHandler(&w.onPaintBorderTop, h, finalize)
 }
 
 // OnPaintTitle sets a window title paint handler. When the event handler is
 // removed, finalize is called, if not nil. Example:
 func (w *Window) OnPaintTitle(h OnPaintHandler, finalize func()) {
-	addOnPaintHandler(w, &w.onPaintTitle, h, finalize)
+	AddOnPaintHandler(&w.onPaintTitle, h, finalize)
 }
 
 // OnSetBorderBottom sets a handler invoked on SetBorderBottom. When the event
 // handler is removed, finalize is called, if not nil.
 func (w *Window) OnSetBorderBottom(h OnSetIntHandler, finalize func()) {
-	addOnSetIntHandler(w, &w.onSetBorderBotom, h, finalize)
+	AddOnSetIntHandler(&w.onSetBorderBotom, h, finalize)
 }
 
 // OnSetBorderLeft sets a handler invoked on SetBorderLeft. When the event
 // handler is removed, finalize is called, if not nil.
 func (w *Window) OnSetBorderLeft(h OnSetIntHandler, finalize func()) {
-	addOnSetIntHandler(w, &w.onSetBorderLeft, h, finalize)
+	AddOnSetIntHandler(&w.onSetBorderLeft, h, finalize)
 }
 
 // OnSetBorderRight sets a handler invoked on SetBorderRight. When the event
 // handler is removed, finalize is called, if not nil.
 func (w *Window) OnSetBorderRight(h OnSetIntHandler, finalize func()) {
-	addOnSetIntHandler(w, &w.onSetBorderRight, h, finalize)
+	AddOnSetIntHandler(&w.onSetBorderRight, h, finalize)
 }
 
 // OnSetBorderStyle sets a handler invoked on SetBorderStyle. When the event
 // handler is removed, finalize is called, if not nil.
 func (w *Window) OnSetBorderStyle(h OnSetStyleHandler, finalize func()) {
-	addOnSetStyleHandler(w, &w.onSetBorderStyle, h, finalize)
+	AddOnSetStyleHandler(&w.onSetBorderStyle, h, finalize)
 }
 
 // OnSetBorderTop sets a handler invoked on SetBorderTop. When the event
 // handler is removed, finalize is called, if not nil.
 func (w *Window) OnSetBorderTop(h OnSetIntHandler, finalize func()) {
-	addOnSetIntHandler(w, &w.onSetBorderTop, h, finalize)
+	AddOnSetIntHandler(&w.onSetBorderTop, h, finalize)
 }
 
 // OnSetClientAreaStyle sets a handler invoked on SetClientAreaStyle. When the
 // event handler is removed, finalize is called, if not nil.
 func (w *Window) OnSetClientAreaStyle(h OnSetStyleHandler, finalize func()) {
-	addOnSetStyleHandler(w, &w.onSetClientAreaStyle, h, finalize)
+	AddOnSetStyleHandler(&w.onSetClientAreaStyle, h, finalize)
 }
 
 // OnSetClientSize sets a handler invoked on SetClientSize. When the event
 // handler is removed, finalize is called, if not nil.
 func (w *Window) OnSetClientSize(h OnSetSizeHandler, finalize func()) {
-	addOnSetSizeHandler(w, &w.onSetClientSize, h, finalize)
+	AddOnSetSizeHandler(&w.onSetClientSize, h, finalize)
 }
 
 // OnSetCloseButton sets a handler invoked on SetCloseButton. When the event
 // handler is removed, finalize is called, if not nil.
 func (w *Window) OnSetCloseButton(h OnSetBoolHandler, finalize func()) {
-	addOnSetBoolHandler(w, &w.onSetCloseButton, h, finalize)
+	addOnSetBoolHandler(&w.onSetCloseButton, h, finalize)
 }
 
 // OnSetFocus sets a handler invoked on SetFocus. When the event handler is
 // removed, finalize is called, if not nil.
 func (w *Window) OnSetFocus(h OnSetBoolHandler, finalize func()) {
-	addOnSetBoolHandler(w, &w.onSetFocus, h, finalize)
+	addOnSetBoolHandler(&w.onSetFocus, h, finalize)
+}
+
+// OnSetOrigin sets a handler invoked on SetOrigin. When the event handler
+// is removed, finalize is called, if not nil.
+func (w *Window) OnSetOrigin(h OnSetPositionHandler, finalize func()) {
+	AddOnSetPositionHandler(&w.onSetOrigin, h, finalize)
 }
 
 // OnSetPosition sets a handler invoked on SetPosition. When the event handler
 // is removed, finalize is called, if not nil.
 func (w *Window) OnSetPosition(h OnSetPositionHandler, finalize func()) {
-	addOnSetPositionHandler(w, &w.onSetPosition, h, finalize)
+	AddOnSetPositionHandler(&w.onSetPosition, h, finalize)
 }
 
 // OnSetSize sets a handler invoked on SetSize. When the event handler is
 // removed, finalize is called, if not nil.
 func (w *Window) OnSetSize(h OnSetSizeHandler, finalize func()) {
-	addOnSetSizeHandler(w, &w.onSetSize, h, finalize)
+	AddOnSetSizeHandler(&w.onSetSize, h, finalize)
 }
 
 // OnSetStyle sets a handler invoked on SetStyle. When the event handler is
 // removed, finalize is called, if not nil.
 func (w *Window) OnSetStyle(h OnSetWindowStyleHandler, finalize func()) {
-	addOnSetWindowStyleHandler(w, &w.onSetStyle, h, finalize)
+	addOnSetWindowStyleHandler(&w.onSetStyle, h, finalize)
 }
 
 // OnSetTitle sets a handler invoked on SetTitle. When the event handler is
 // removed, finalize is called, if not nil.
 func (w *Window) OnSetTitle(h OnSetStringHandler, finalize func()) {
-	addOnSetStringHandler(w, &w.onSetTitle, h, finalize)
+	addOnSetStringHandler(&w.onSetTitle, h, finalize)
 }
+
+// Origin returns the window's origin..
+func (w *Window) Origin() Position { return w.view }
 
 // Printf prints format with arguments at x, y. Calling this method outside of
 // an OnPaint handler is ignored.
@@ -1685,7 +1686,7 @@ func (w *Window) OnSetTitle(h OnSetStringHandler, finalize func()) {
 //	'\n'	x, y = 0, y+1
 //	'\r'	x, y = 0, y
 func (w *Window) Printf(x, y int, style Style, format string, arg ...interface{}) {
-	if w.paintArea.IsZero() { // Zero sized window or not in OnPaint.
+	if w.ctx.area.IsZero() { // Zero sized window or not in OnPaint.
 		return
 	}
 
@@ -1700,148 +1701,152 @@ func (w *Window) Position() Position { return w.position }
 
 // RemoveOnClick undoes the most recent OnClick call. The function will panic if
 // there is no handler set.
-func (w *Window) RemoveOnClick() { removeOnMouseHandler(w, &w.onClick) }
+func (w *Window) RemoveOnClick() { removeOnMouseHandler(&w.onClick) }
 
 // RemoveOnClickBorder undoes the most recent OnClickBorder call. The function
 // will panic if there is no handler set.
-func (w *Window) RemoveOnClickBorder() { removeOnMouseHandler(w, &w.onClickBorder) }
+func (w *Window) RemoveOnClickBorder() { removeOnMouseHandler(&w.onClickBorder) }
 
 // RemoveOnClose undoes the most recent OnClose call. The function will panic
 // if there is no handler set.
-func (w *Window) RemoveOnClose() { removeOnCloseHandler(w, &w.onClose) }
+func (w *Window) RemoveOnClose() { removeOnCloseHandler(&w.onClose) }
 
 // RemoveOnDoubleClick undoes the most recent OnDoubleClick call. The function
 // will panic if there is no handler set.
-func (w *Window) RemoveOnDoubleClick() { removeOnMouseHandler(w, &w.onDoubleClick) }
+func (w *Window) RemoveOnDoubleClick() { removeOnMouseHandler(&w.onDoubleClick) }
 
 // RemoveOnDoubleClickBorder undoes the most recent OnDoubleClickBorder call.
 // The function will panic if there is no handler set.
-func (w *Window) RemoveOnDoubleClickBorder() { removeOnMouseHandler(w, &w.onDoubleClickBorder) }
+func (w *Window) RemoveOnDoubleClickBorder() { removeOnMouseHandler(&w.onDoubleClickBorder) }
 
 // RemoveOnDrag undoes the most recent OnDrag call. The function will panic if
 // there is no handler set.
-func (w *Window) RemoveOnDrag() { removeOnMouseHandler(w, &w.onDrag) }
+func (w *Window) RemoveOnDrag() { removeOnMouseHandler(&w.onDrag) }
 
 // RemoveOnDragBorder undoes the most recent OnDragBorder call. The function
 // will panic if there is no handler set.
-func (w *Window) RemoveOnDragBorder() { removeOnMouseHandler(w, &w.onDragBorder) }
+func (w *Window) RemoveOnDragBorder() { removeOnMouseHandler(&w.onDragBorder) }
 
 // RemoveOnDrop undoes the most recent OnDrop call. The function will panic if
 // there is no handler set.
-func (w *Window) RemoveOnDrop() { removeOnMouseHandler(w, &w.onDrop) }
+func (w *Window) RemoveOnDrop() { removeOnMouseHandler(&w.onDrop) }
 
 // RemoveOnKey undoes the most recent OnKey call. The function will panic if
 // there is no handler set.
-func (w *Window) RemoveOnKey() { removeOnKeyHandler(w, &w.onKey) }
+func (w *Window) RemoveOnKey() { removeOnKeyHandler(&w.onKey) }
 
 // RemoveOnMouseMove undoes the most recent OnMouseMove call. The function will
 // panic if there is no handler set.
-func (w *Window) RemoveOnMouseMove() { removeOnMouseHandler(w, &w.onMouseMove) }
+func (w *Window) RemoveOnMouseMove() { removeOnMouseHandler(&w.onMouseMove) }
 
 // RemoveOnPaintClientArea undoes the most recent OnPaintClientArea call. The
 // function will panic if there is no handler set.
-func (w *Window) RemoveOnPaintClientArea() { removeOnPaintHandler(w, &w.onPaintClientArea) }
+func (w *Window) RemoveOnPaintClientArea() { RemoveOnPaintHandler(&w.onPaintClientArea) }
 
 // RemoveOnPaintBorderBottom undoes the most recent OnPaintBorderBottom call.
 // The function will panic if there is no handler set.
-func (w *Window) RemoveOnPaintBorderBottom() { removeOnPaintHandler(w, &w.onPaintBorderBottom) }
+func (w *Window) RemoveOnPaintBorderBottom() { RemoveOnPaintHandler(&w.onPaintBorderBottom) }
 
 // RemoveOnPaintBorderLeft undoes the most recent OnPaintBorderLeft call.
 // The function will panic if there is no handler set.
-func (w *Window) RemoveOnPaintBorderLeft() { removeOnPaintHandler(w, &w.onPaintBorderLeft) }
+func (w *Window) RemoveOnPaintBorderLeft() { RemoveOnPaintHandler(&w.onPaintBorderLeft) }
 
 // RemoveOnPaintBorderRight undoes the most recent OnPaintBorderRight call.
 // The function will panic if there is no handler set.
-func (w *Window) RemoveOnPaintBorderRight() { removeOnPaintHandler(w, &w.onPaintBorderRight) }
+func (w *Window) RemoveOnPaintBorderRight() { RemoveOnPaintHandler(&w.onPaintBorderRight) }
 
 // RemoveOnPaintBorderTop undoes the most recent OnPaintBorderTop call.
 // The function will panic if there is no handler set.
-func (w *Window) RemoveOnPaintBorderTop() { removeOnPaintHandler(w, &w.onPaintBorderTop) }
+func (w *Window) RemoveOnPaintBorderTop() { RemoveOnPaintHandler(&w.onPaintBorderTop) }
 
 // RemoveOnPaintTitle undoes the most recent OnPaintTitle call.  The function
 // will panic if there is no handler set.
-func (w *Window) RemoveOnPaintTitle() { removeOnPaintHandler(w, &w.onPaintTitle) }
+func (w *Window) RemoveOnPaintTitle() { RemoveOnPaintHandler(&w.onPaintTitle) }
 
 // RemoveOnSetBorderBottom undoes the most recent OnSetBorderBottom call. The
 // function will panic if there is no handler set.
-func (w *Window) RemoveOnSetBorderBottom() { removeOnSetIntHandler(w, &w.onSetBorderBotom) }
+func (w *Window) RemoveOnSetBorderBottom() { RemoveOnSetIntHandler(&w.onSetBorderBotom) }
 
 // RemoveOnSetBorderLeft undoes the most recent OnSetBorderLeft call. The
 // function will panic if there is no handler set.
-func (w *Window) RemoveOnSetBorderLeft() { removeOnSetIntHandler(w, &w.onSetBorderLeft) }
+func (w *Window) RemoveOnSetBorderLeft() { RemoveOnSetIntHandler(&w.onSetBorderLeft) }
 
 // RemoveOnSetBorderRight undoes the most recent OnSetBorderRight call. The
 // function will panic if there is no handler set.
-func (w *Window) RemoveOnSetBorderRight() { removeOnSetIntHandler(w, &w.onSetBorderRight) }
+func (w *Window) RemoveOnSetBorderRight() { RemoveOnSetIntHandler(&w.onSetBorderRight) }
 
 // RemoveOnSetBorderStyle undoes the most recent OnSetBorderStyle call. The
 // function will panic if there is no handler set.
-func (w *Window) RemoveOnSetBorderStyle() { removeOnSetStyleHandler(w, &w.onSetBorderStyle) }
+func (w *Window) RemoveOnSetBorderStyle() { RemoveOnSetStyleHandler(&w.onSetBorderStyle) }
 
 // RemoveOnSetBorderTop undoes the most recent OnSetBorderTop call. The
 // function will panic if there is no handler set.
-func (w *Window) RemoveOnSetBorderTop() { removeOnSetIntHandler(w, &w.onSetBorderTop) }
+func (w *Window) RemoveOnSetBorderTop() { RemoveOnSetIntHandler(&w.onSetBorderTop) }
 
 // RemoveOnSetClientAreaStyle undoes the most recent OnSetClientAreaStyle call.
 // The function will panic if there is no handler set.
-func (w *Window) RemoveOnSetClientAreaStyle() { removeOnSetStyleHandler(w, &w.onSetClientAreaStyle) }
+func (w *Window) RemoveOnSetClientAreaStyle() { RemoveOnSetStyleHandler(&w.onSetClientAreaStyle) }
 
 // RemoveOnSetClientSize undoes the most recent OnSetClientSize call. The
 // function will panic if there is no handler set.
-func (w *Window) RemoveOnSetClientSize() { removeOnSetSizeHandler(w, &w.onSetClientSize) }
+func (w *Window) RemoveOnSetClientSize() { RemoveOnSetSizeHandler(&w.onSetClientSize) }
 
 // RemoveOnSetCloseButton undoes the most recent OnSetCloseButton call. The
 // function will panic if there is no handler set.
-func (w *Window) RemoveOnSetCloseButton() { removeOnSetBoolHandler(w, &w.onSetCloseButton) }
+func (w *Window) RemoveOnSetCloseButton() { removeOnSetBoolHandler(&w.onSetCloseButton) }
 
 // RemoveOnSetFocus undoes the most recent OnSetFocus call. The function will
 // panic if there is no handler set.
-func (w *Window) RemoveOnSetFocus() { removeOnSetBoolHandler(w, &w.onSetFocus) }
+func (w *Window) RemoveOnSetFocus() { removeOnSetBoolHandler(&w.onSetFocus) }
+
+// RemoveOnSetOrigin undoes the most recent OnSetOrigin call. The function
+// will panic if there is no handler set.
+func (w *Window) RemoveOnSetOrigin() { RemoveOnSetPositionHandler(&w.onSetOrigin) }
 
 // RemoveOnSetPosition undoes the most recent OnSetPosition call. The function
 // will panic if there is no handler set.
-func (w *Window) RemoveOnSetPosition() { removeOnSetPositionHandler(w, &w.onSetPosition) }
+func (w *Window) RemoveOnSetPosition() { RemoveOnSetPositionHandler(&w.onSetPosition) }
 
 // RemoveOnSetSize undoes the most recent OnSetSize call. The function will
 // panic if there is no handler set.
-func (w *Window) RemoveOnSetSize() { removeOnSetSizeHandler(w, &w.onSetSize) }
+func (w *Window) RemoveOnSetSize() { RemoveOnSetSizeHandler(&w.onSetSize) }
 
 // RemoveOnSetStyle undoes the most recent OnSetStyle call. The function will
 // panic if there is no handler set.
-func (w *Window) RemoveOnSetStyle() { removeOnSetWindowStyleHandler(w, &w.onSetStyle) }
+func (w *Window) RemoveOnSetStyle() { removeOnSetWindowStyleHandler(&w.onSetStyle) }
 
 // RemoveOnSetTitle undoes the most recent OnSetTitle call. The function will
 // panic if there is no handler set.
-func (w *Window) RemoveOnSetTitle() { removeOnSetStringHandler(w, &w.onSetTitle) }
+func (w *Window) RemoveOnSetTitle() { removeOnSetStringHandler(&w.onSetTitle) }
 
 // SetBorderBottom sets the height of the bottom border.
-func (w *Window) SetBorderBottom(v int) { w.onSetBorderBotom.handle(w, &w.borderBottom, v) }
+func (w *Window) SetBorderBottom(v int) { w.onSetBorderBotom.Handle(w, &w.borderBottom, v) }
 
 // SetBorderLeft sets the width of the left border.
-func (w *Window) SetBorderLeft(v int) { w.onSetBorderLeft.handle(w, &w.borderLeft, v) }
+func (w *Window) SetBorderLeft(v int) { w.onSetBorderLeft.Handle(w, &w.borderLeft, v) }
 
 // SetBorderRight sets the width of the right border.
-func (w *Window) SetBorderRight(v int) { w.onSetBorderRight.handle(w, &w.borderRight, v) }
+func (w *Window) SetBorderRight(v int) { w.onSetBorderRight.Handle(w, &w.borderRight, v) }
 
 // SetBorderStyle sets the border style.
-func (w *Window) SetBorderStyle(s Style) { w.onSetBorderStyle.handle(w, &w.style.Border, s) }
+func (w *Window) SetBorderStyle(s Style) { w.onSetBorderStyle.Handle(w, &w.style.Border, s) }
 
 // SetBorderTop sets the height of the top border.
-func (w *Window) SetBorderTop(v int) { w.onSetBorderTop.handle(w, &w.borderTop, v) }
+func (w *Window) SetBorderTop(v int) { w.onSetBorderTop.Handle(w, &w.borderTop, v) }
 
 // SetCell renders a single character cell. Calling this method outside of an
 // OnPaint* handler is ignored.
 func (w *Window) SetCell(x, y int, mainc rune, combc []rune, style tcell.Style) {
 	w.beginUpdate()
-	w.setCell(x, y, mainc, combc, style)
+	w.setCell(Position{x, y}, mainc, combc, style)
 	w.endUpdate()
 }
 
 // SetClientAreaStyle sets the client area style.
-func (w *Window) SetClientAreaStyle(s Style) { w.onSetClientAreaStyle.handle(w, &w.style.ClientArea, s) }
+func (w *Window) SetClientAreaStyle(s Style) { w.onSetClientAreaStyle.Handle(w, &w.style.ClientArea, s) }
 
 // SetClientSize sets the size of the client area.
-func (w *Window) SetClientSize(s Size) { w.onSetSize.handle(w, &w.clientArea.Size, s) }
+func (w *Window) SetClientSize(s Size) { w.onSetClientSize.Handle(w, &w.clientArea.Size, s) }
 
 // SetCloseButton sets whether the window shows a close button.
 func (w *Window) SetCloseButton(v bool) {
@@ -1853,10 +1858,24 @@ func (w *Window) SetCloseButton(v bool) {
 // SetFocus sets whether the window is focused.
 func (w *Window) SetFocus(v bool) { w.onSetFocus.handle(w, &w.focus, v) }
 
+// SetOrigin sets the origin of the window. By default the origin of a window
+// is (0, 0).  When a paint handler is invoked the window's origin is
+// subtracted from the coordinates the handler paints to. Also, the
+// PaintContext.Rectangle value passed to the handler is adjusted accordingly.
+//
+// Setting origin other than (0, 0) provides a view into the content created by
+// the respective paint handlers. The mechanism aids in displaying scrolling
+// content.
+//
+// Negative values of p.X or p.Y are ignored.
+func (w *Window) SetOrigin(p Position) {
+	w.onSetOrigin.Handle(w, &w.view, Position{X: mathutil.Max(p.X, 0), Y: mathutil.Max(p.Y, 0)})
+}
+
 // SetPosition sets the window position relative to its parent.
 func (w *Window) SetPosition(p Position) {
 	if w.parent != nil {
-		w.onSetPosition.handle(w, &w.position, p)
+		w.onSetPosition.Handle(w, &w.position, p)
 	}
 }
 

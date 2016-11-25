@@ -14,6 +14,9 @@ type Position struct {
 	X, Y int
 }
 
+func (p Position) add(q Position) Position { return Position{p.X + q.X, p.Y + q.Y} }
+func (p Position) sub(q Position) Position { return Position{p.X - q.X, p.Y - q.Y} }
+
 // In returns whether p is inside r.
 func (p Position) In(r Rectangle) bool { return r.Has(p) }
 

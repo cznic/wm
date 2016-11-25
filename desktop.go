@@ -47,7 +47,7 @@ func (d *Desktop) OnSetFocusedWindow(h OnSetWindowHandler, finalize func()) {
 		return
 	}
 
-	addOnSetWindowHandler(r, &r.onSetFocusedWindow, h, finalize)
+	addOnSetWindowHandler(&r.onSetFocusedWindow, h, finalize)
 }
 
 // OnSetSelection sets a handler invoked on SetSelection. When the event
@@ -58,7 +58,7 @@ func (d *Desktop) OnSetSelection(h OnSetRectangleHandler, finalize func()) {
 		return
 	}
 
-	addOnSetRectangleHandler(r, &r.onSetSelection, h, finalize)
+	addOnSetRectangleHandler(&r.onSetSelection, h, finalize)
 }
 
 // RemoveOnSetFocusedWindow undoes the most recent OnSetFocusedWindow call. The
@@ -69,7 +69,7 @@ func (d *Desktop) RemoveOnSetFocusedWindow() {
 		return
 	}
 
-	removeOnSetWindowHandler(r, &r.onSetFocusedWindow)
+	removeOnSetWindowHandler(&r.onSetFocusedWindow)
 }
 
 // RemoveOnSetSelection undoes the most recent OnSetSelection call. The
@@ -80,7 +80,7 @@ func (d *Desktop) RemoveOnSetSelection() {
 		return
 	}
 
-	removeOnSetRectangleHandler(r, &r.onSetSelection)
+	removeOnSetRectangleHandler(&r.onSetSelection)
 }
 
 // Root returns the root window of d.

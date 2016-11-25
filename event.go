@@ -26,7 +26,7 @@ type event struct{}
 func (e event) When() time.Time { return time.Time{} }
 
 const (
-	_ = iota
+	_ = iota //TODOOK
 	mouseClick
 	mouseDoubleClick
 	mouseDrag

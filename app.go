@@ -6,6 +6,9 @@
 //
 // Changelog
 //
+// 2016-11-25: Windows now support views (viewports). See Windows.Origin and
+// friends.
+//
 // 2015-12-11: WM now uses no locks and renders 2 to 3 times faster. The price
 // is that any methods of Application, Desktop or Window must be called only
 // from a function that was enqueued by Application.Post or
@@ -15,7 +18,6 @@ package wm
 import (
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/gdamore/tcell"
@@ -34,7 +36,8 @@ var (
 // Application represents an interactive terminal application.
 //
 // Application methods must be called only from a function that was enqueued
-// using Application.Post or Application.PostWait.
+// using Application.Post or Application.PostWait. The only exception is
+// Application.Wait, it can be called from any goroutine.
 type Application struct {
 	click             time.Duration             //
 	desktop           *Desktop                  //
@@ -48,7 +51,7 @@ type Application struct {
 	onSetClick        *onSetDurationHandlerList //
 	onSetDesktop      *onSetDesktopHandlerList  //
 	onSetDoubleClick  *onSetDurationHandlerList //
-	onSetSize         *onSetSizeHandlerList     //
+	onSetSize         *OnSetSizeHandlerList     //
 	onceExit          sync.Once                 //
 	onceFinalize      sync.Once                 //
 	onceWait          sync.Once                 //
@@ -160,7 +163,9 @@ func (a *Application) handleEvents() {
 				a.mouseButtonsState = b
 				x := 0
 				for diff != 0 {
-					a.mouseButtonFSMs[x].post(e)
+					if diff&1 != 0 {
+						a.mouseButtonFSMs[x].post(e)
+					}
 					diff >>= 1
 					x++
 				}
@@ -277,21 +282,23 @@ func (a *Application) paintSelection() {
 // beginUpdate marks the start of one or more updates to the application
 // screen.
 func (a *Application) beginUpdate() {
-	if atomic.AddInt32(&a.updateLevel, 1) == 1 {
+	a.updateLevel++
+	if a.updateLevel == 1 {
 		a.paintSelection() // Remove selection.
 	}
 }
 
 // endUpdate marks the end of one or more updates to the application screen.
 func (a *Application) endUpdate() {
-	if atomic.AddInt32(&a.updateLevel, -1) == 0 {
+	a.updateLevel--
+	if a.updateLevel == 0 {
 		a.paintSelection() // Show selection.
 		a.screen.Show()
 	}
 }
 
-func (a *Application) setCell(x, y int, mainc rune, combc []rune, style tcell.Style) {
-	a.screen.SetContent(x, y, mainc, combc, style)
+func (a *Application) setCell(p Position, mainc rune, combc []rune, style tcell.Style) {
+	a.screen.SetContent(p.X, p.Y, mainc, combc, style)
 }
 
 func (a *Application) finalize() { a.onceFinalize.Do(func() { a.screen.Fini() }) }
@@ -334,31 +341,31 @@ func (a *Application) NewDesktop() *Desktop { return newDesktop() }
 // OnKey sets a key event handler. When the event handler is removed, finalize
 // is called, if not nil.
 func (a *Application) OnKey(h OnKeyHandler, finalize func()) {
-	addOnKeyHandler(nil, &a.onKey, h, finalize)
+	addOnKeyHandler(&a.onKey, h, finalize)
 }
 
 // OnSetClickDuration sets a handler invoked on SetClickDuration. When the
 // event handler is removed, finalize is called, if not nil.
 func (a *Application) OnSetClickDuration(h OnSetDurationHandler, finalize func()) {
-	addOnSetDurationHandler(nil, &a.onSetClick, h, finalize)
+	addOnSetDurationHandler(&a.onSetClick, h, finalize)
 }
 
 // OnSetDesktop sets a handler invoked on SetDesktop. When the event handler is
 // removed, finalize is called, if not nil.
 func (a *Application) OnSetDesktop(h OnSetDesktopHandler, finalize func()) {
-	addOnSetDesktopHandler(nil, &a.onSetDesktop, h, finalize)
+	addOnSetDesktopHandler(&a.onSetDesktop, h, finalize)
 }
 
 // OnSetDoubleClickDuration sets a handler invoked on SetDoubleClickDuration.
 // When the event handler is removed, finalize is called, if not nil.
 func (a *Application) OnSetDoubleClickDuration(h OnSetDurationHandler, finalize func()) {
-	addOnSetDurationHandler(nil, &a.onSetDoubleClick, h, finalize)
+	addOnSetDurationHandler(&a.onSetDoubleClick, h, finalize)
 }
 
 // OnSetSize sets a handler invoked on resizing the application screen. When
 // the event handler is removed, finalize is called, if not nil.
 func (a *Application) OnSetSize(h OnSetSizeHandler, finalize func()) {
-	addOnSetSizeHandler(nil, &a.onSetSize, h, finalize)
+	AddOnSetSizeHandler(&a.onSetSize, h, finalize)
 }
 
 // Post puts f in the event queue, if the queue is not full, and executes it on
@@ -370,26 +377,26 @@ func (a *Application) PostWait(f func()) { a.screen.PostEventWait(newEventFunc(f
 
 // RemoveOnKey undoes the most recent OnKey call. The function will panic if
 // there is no handler set.
-func (a *Application) RemoveOnKey() { removeOnKeyHandler(nil, &a.onKey) }
+func (a *Application) RemoveOnKey() { removeOnKeyHandler(&a.onKey) }
 
 // RemoveOnSetClickDuration undoes the most recent OnSetClickDuration call. The
 // function will panic if there is no handler set.
-func (a *Application) RemoveOnSetClickDuration() { removeOnSetDurationHandler(nil, &a.onSetClick) }
+func (a *Application) RemoveOnSetClickDuration() { removeOnSetDurationHandler(&a.onSetClick) }
 
 // RemoveOnSetDesktop undoes the most recent OnSetDesktop call. The function
 // will panic if there is no handler set.
-func (a *Application) RemoveOnSetDesktop() { removeOnSetDesktopHandler(nil, &a.onSetDesktop) }
+func (a *Application) RemoveOnSetDesktop() { removeOnSetDesktopHandler(&a.onSetDesktop) }
 
 // RemoveOnSetDoubleClickDuration undoes the most recent
 // OnSetDoubleClickDuration call. The function will panic if there is no
 // handler set.
 func (a *Application) RemoveOnSetDoubleClickDuration() {
-	removeOnSetDurationHandler(nil, &a.onSetDoubleClick)
+	removeOnSetDurationHandler(&a.onSetDoubleClick)
 }
 
 // RemoveOnSetSize undoes the most recent OnSetSize call. The function
 // will panic if there is no handler set.
-func (a *Application) RemoveOnSetSize() { removeOnSetSizeHandler(nil, &a.onSetSize) }
+func (a *Application) RemoveOnSetSize() { RemoveOnSetSizeHandler(&a.onSetSize) }
 
 // SetClickDuration sets the maximum duration of a single click. Holding a
 // mouse button for any longer duration generates a drag event instead.
@@ -413,7 +420,7 @@ func (a *Application) SetDoubleClickDuration(d time.Duration) {
 	a.onSetClick.handle(nil, &a.doubleClick, d)
 }
 
-func (a *Application) setSize(s Size) { a.onSetSize.handle(nil, &a.size, s) }
+func (a *Application) setSize(s Size) { a.onSetSize.Handle(nil, &a.size, s) }
 
 // Size returns the size of the terminal the application runs in.
 func (a *Application) Size() (s Size) { return a.size }

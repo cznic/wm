@@ -69,7 +69,10 @@ func newWindow(parent *wm.Window, x, y int) {
 
 			select {
 			case <-t.C:
+				view := w.Origin()
 				a := w.ClientArea()
+				a.Position.X += view.X
+				a.Position.Y += view.Y
 				if x >= a.Width-1 {
 					if x > a.Width {
 						x = a.Width
@@ -167,29 +170,80 @@ func main() {
 					prev(w, nil, ctx)
 				}
 
-				mousPosStr := ""
+				mousePosStr := ""
 				if w == mouseMoveWindow {
-					mousPosStr = fmt.Sprintf("Mouse: %+v", mousePos)
+					mousePosStr = fmt.Sprintf("Mouse: %+v", mousePos)
 				}
 				w.Printf(0, 0, w.ClientAreaStyle(),
 					`Ctrl-N to create a new random window.
 Ctrl-click inside a child window to create a nested random window.
 Use mouse to bring to front, drag, resize or close a window.
-Esc to quit.
+Arrow keys change the viewport of the focused window.
+To focus the desktop, click on it.
+<Esc> or <q> to quit.
 Rendered in %s.
-%s`, renderedIn, mousPosStr)
+%s`, renderedIn, mousePosStr)
 			},
 			nil,
 		)
 		r.OnMouseMove(onMouseMove, nil)
 		app.OnKey(
 			func(w *wm.Window, prev wm.OnKeyHandler, key tcell.Key, mod tcell.ModMask, r rune) bool {
+				if r == 'q' || r == 'Q' {
+					app.Exit(nil)
+					return true
+				}
+
 				switch key {
 				case tcell.KeyESC:
 					app.Exit(nil)
 					return true
 				case tcell.KeyCtrlN:
 					app.PostWait(func() { newWindow(app.Desktop().Root(), -1, -1) })
+					return true
+				case tcell.KeyLeft:
+					w := d.FocusedWindow()
+					if w == nil {
+						return true
+					}
+
+					app.PostWait(func() {
+						o := w.Origin()
+						w.SetOrigin(wm.Position{X: o.X - 1, Y: o.Y})
+					})
+					return true
+				case tcell.KeyRight:
+					w := d.FocusedWindow()
+					if w == nil {
+						return true
+					}
+
+					app.PostWait(func() {
+						o := w.Origin()
+						w.SetOrigin(wm.Position{X: o.X + 1, Y: o.Y})
+					})
+					return true
+				case tcell.KeyUp:
+					w := d.FocusedWindow()
+					if w == nil {
+						return true
+					}
+
+					app.PostWait(func() {
+						o := w.Origin()
+						w.SetOrigin(wm.Position{X: o.X, Y: o.Y - 1})
+					})
+					return true
+				case tcell.KeyDown:
+					w := d.FocusedWindow()
+					if w == nil {
+						return true
+					}
+
+					app.PostWait(func() {
+						o := w.Origin()
+						w.SetOrigin(wm.Position{X: o.X, Y: o.Y + 1})
+					})
 					return true
 				default:
 					return false
