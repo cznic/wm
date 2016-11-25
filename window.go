@@ -128,7 +128,7 @@ func newWindow(desktop *Desktop, parent *Window, style WindowStyle) *Window {
 }
 
 func (w *Window) setCell(p Position, mainc rune, combc []rune, style tcell.Style) {
-	if !w.ctx.origin.add(p).In(w.ctx.area) {
+	if !w.ctx.origin.add(p).In(w.ctx.Rectangle) {
 		return
 	}
 
@@ -270,16 +270,16 @@ func (w *Window) onClearBordersHandler(_ *Window, prev OnPaintHandler, ctx Paint
 	}
 
 	style := w.Style().Border.TCellStyle()
-	if a := w.BorderTopArea(); a.Clip(ctx.area) {
+	if a := w.BorderTopArea(); a.Clip(ctx.Rectangle) {
 		w.clear(a, style)
 	}
-	if a := w.BorderLeftArea(); a.Clip(ctx.area) {
+	if a := w.BorderLeftArea(); a.Clip(ctx.Rectangle) {
 		w.clear(a, style)
 	}
-	if a := w.BorderRightArea(); a.Clip(ctx.area) {
+	if a := w.BorderRightArea(); a.Clip(ctx.Rectangle) {
 		w.clear(a, style)
 	}
-	if a := w.BorderBottomArea(); a.Clip(ctx.area) {
+	if a := w.BorderBottomArea(); a.Clip(ctx.Rectangle) {
 		w.clear(a, style)
 	}
 }
@@ -515,7 +515,7 @@ func (w *Window) onClearClientAreaHandler(_ *Window, prev OnPaintHandler, ctx Pa
 		panic("internal error")
 	}
 
-	w.clear(Rectangle{ctx.area.sub(ctx.origin), ctx.area.Size}, w.Style().ClientArea.TCellStyle())
+	w.clear(Rectangle{ctx.sub(ctx.origin), ctx.Rectangle.Size}, w.Style().ClientArea.TCellStyle())
 }
 
 func (w *Window) onPaintChildrenHandler(_ *Window, prev OnPaintHandler, ctx PaintContext) {
@@ -531,7 +531,7 @@ func (w *Window) onPaintChildrenHandler(_ *Window, prev OnPaintHandler, ctx Pain
 		}
 
 		chPos := c.Position().add(clPos)
-		if area := (Rectangle{chPos, c.Size()}); area.Clip(ctx.area) {
+		if area := (Rectangle{chPos, c.Size()}); area.Clip(ctx.Rectangle) {
 			c.paint(Rectangle{area.sub(chPos), area.Size})
 		}
 	}
@@ -985,7 +985,7 @@ func (w *Window) print(x, y int, style tcell.Style, s string) {
 		return
 	}
 
-	if w.ctx.area.IsZero() { // Zero sized window or not in OnPaint.
+	if w.ctx.IsZero() { // Zero sized window or not in OnPaint.
 		return
 	}
 
@@ -1686,7 +1686,7 @@ func (w *Window) Origin() Position { return w.view }
 //	'\n'	x, y = 0, y+1
 //	'\r'	x, y = 0, y
 func (w *Window) Printf(x, y int, style Style, format string, arg ...interface{}) {
-	if w.ctx.area.IsZero() { // Zero sized window or not in OnPaint.
+	if w.ctx.IsZero() { // Zero sized window or not in OnPaint.
 		return
 	}
 

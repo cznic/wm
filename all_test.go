@@ -95,16 +95,16 @@ func TestDesktopPaintContext(t *testing.T) {
 	})
 	<-ch
 	if g, e := cc, (PaintContext{
-		area:   Rectangle{Position{}, Size{80, 25}},
-		origin: Position{},
-		view:   Position{},
+		Rectangle: Rectangle{Position{}, Size{80, 25}},
+		origin:    Position{},
+		view:      Position{},
 	}); g != e {
 		t.Fatalf("\n%+v\n%+v", g, e)
 	}
 	if g, e := c, (PaintContext{
-		area:   Rectangle{Position{}, Size{80, 25}},
-		origin: Position{},
-		view:   Position{},
+		Rectangle: Rectangle{Position{}, Size{80, 25}},
+		origin:    Position{},
+		view:      Position{},
 	}); g != e {
 		t.Fatalf("\n%+v\n%+v", g, e)
 	}
@@ -115,16 +115,16 @@ func TestDesktopPaintContext(t *testing.T) {
 	})
 	<-ch
 	if g, e := cc, (PaintContext{
-		area:   Rectangle{Position{}, Size{80, 25}},
-		origin: Position{},
-		view:   Position{},
+		Rectangle: Rectangle{Position{}, Size{80, 25}},
+		origin:    Position{},
+		view:      Position{},
 	}); g != e {
 		t.Fatalf("\n%+v\n%+v", g, e)
 	}
 	if g, e := c, (PaintContext{
-		area:   Rectangle{Position{2, 1}, Size{80, 25}},
-		origin: Position{},
-		view:   Position{2, 1},
+		Rectangle: Rectangle{Position{2, 1}, Size{80, 25}},
+		origin:    Position{},
+		view:      Position{2, 1},
 	}); g != e {
 		t.Fatalf("\n%+v\n%+v", g, e)
 	}

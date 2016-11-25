@@ -11,7 +11,7 @@ import (
 
 // PaintContext represent painting context passed to paint handlers.
 type PaintContext struct {
-	area   Rectangle
+	Rectangle
 	origin Position
 	view   Position
 }
@@ -246,7 +246,7 @@ func (l *OnPaintHandlerList) Clear() {
 
 // Handle performs painting of ctx.
 func (l *OnPaintHandlerList) Handle(w *Window, ctx PaintContext) {
-	if l == nil || ctx.area.IsZero() {
+	if l == nil || ctx.IsZero() {
 		return
 	}
 
