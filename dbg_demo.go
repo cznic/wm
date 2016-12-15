@@ -17,6 +17,7 @@ import (
 	"github.com/cznic/wm"
 	"github.com/cznic/wm/internal/demoapp"
 	"github.com/gdamore/tcell"
+	"github.com/golang/glog"
 )
 
 const (
@@ -56,9 +57,6 @@ func newWindow(parent *wm.Window, x, y int) {
 	w := rand.Intn(a.Width/2) + 10
 	h := rand.Intn(a.Height/2) + 10
 	c := parent.NewChild(wm.Rectangle{wm.Position{x, y}, wm.Size{w, h}})
-	x, y = 0, 0
-	dx, dy := 1, 1
-	t := time.NewTicker(time.Millisecond * time.Duration(35+rand.Intn(10)))
 	style := tcell.Style(0).Foreground(rndColor())
 	c.SetCloseButton(true)
 	c.SetTitle(time.Now().Format("15:04:05"))
@@ -68,52 +66,10 @@ func newWindow(parent *wm.Window, x, y int) {
 				prev(w, nil, ctx)
 			}
 
-			select {
-			case <-t.C:
-				view := w.Origin()
-				a := w.ClientArea()
-				a.Position.X += view.X
-				a.Position.Y += view.Y
-				if x >= a.Width-1 {
-					if x > a.Width {
-						x = a.Width
-					}
-					dx = -1
-				} else if x <= 0 {
-					if x < 0 {
-						x = -1
-					}
-					dx = 1
-				}
-				if y >= a.Height-1 {
-					if y > a.Height {
-						y = a.Height
-					}
-					dy = -1
-				} else if y <= 0 {
-					if y < 0 {
-						y = -1
-					}
-					dy = 1
-				}
-
-				x += dx
-				y += dy
-			default:
-			}
-			if w == mouseMoveWindow {
-				w.Printf(0, 0, w.ClientAreaStyle(), "Mouse: %+v", mousePos)
-			}
-			w.SetCell(x, y, block, nil, style)
-		},
-		nil,
-	)
-	c.OnClose(
-		func(w *wm.Window, prev wm.OnCloseHandler) {
-			if prev != nil {
-				prev(w, nil)
-			}
-			t.Stop()
+			w.Printf(0, 0, w.ClientAreaStyle(), "abc %v %v %v", c.Position(), c.Size(), w.ClientArea())
+			w.Printf(0, 1, w.ClientAreaStyle(), "def %v %v %v", c.Position(), c.Size(), w.ClientArea())
+			w.Printf(0, 2, w.ClientAreaStyle(), "ghi %v %v %v", c.Position(), c.Size(), w.ClientArea())
+			w.SetCell(c.ClientArea().Size.Width/2, c.ClientArea().Size.Height/2, block, nil, style)
 		},
 		nil,
 	)
@@ -153,7 +109,6 @@ func setup(d *wm.Desktop) {
 	app := wm.App
 	app.SetDoubleClickDuration(0)
 	r := d.Root()
-	var renderedIn time.Duration
 	r.OnPaintClientArea(
 		func(w *wm.Window, prev wm.OnPaintHandler, ctx wm.PaintContext) {
 			if prev != nil {
@@ -172,7 +127,7 @@ Arrow keys change the viewport of the focused window.
 To focus the desktop, click on it.
 <Esc> or <q> to quit.
 Rendered in %s.
-%s`, renderedIn, mousePosStr)
+%s`, r.Rendered(), mousePosStr)
 		},
 		nil,
 	)
@@ -189,7 +144,11 @@ Rendered in %s.
 			case tcell.KeyESC:
 				app.Exit(nil)
 				return true
+			case tcell.KeyCtrlQ:
+				app.Exit(nil)
+				return true
 			case tcell.KeyCtrlN:
+				glog.Info("==== CTRL-N")
 				newWindow(app.Desktop().Root(), -1, -1)
 				return true
 			case tcell.KeyLeft:
@@ -228,25 +187,28 @@ Rendered in %s.
 				o := w.Origin()
 				w.SetOrigin(wm.Position{X: o.X, Y: o.Y + 1})
 				return true
+			case tcell.KeyF2:
+				w := d.FocusedWindow()
+				if w == nil {
+					return true
+				}
+
+				w.Invalidate(wm.NewRectangle(1, 1, 11, 11))
+				return true
+			case tcell.KeyF3:
+				w := d.FocusedWindow()
+				if w == nil {
+					return true
+				}
+
+				w.InvalidateClientArea(wm.NewRectangle(1, 1, 11, 11))
+				return true
 			default:
 				return false
 			}
 		},
 		nil,
 	)
-	fps := 25
-	i := 0
-	go func() {
-		for range time.NewTicker(time.Second / time.Duration(fps)).C {
-			app.Post(func() {
-				i = (i + 1) % fps
-				r.Invalidate(r.Area())
-				if i == 0 {
-					renderedIn = r.Rendered()
-				}
-			})
-		}
-	}()
 	d.Show()
 }
 
@@ -257,4 +219,6 @@ func main() {
 	if err := app.Run(func() { setup(d) }); err != nil {
 		log.Fatal(err)
 	}
+
+	glog.Flush()
 }

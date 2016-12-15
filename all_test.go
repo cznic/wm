@@ -53,6 +53,15 @@ func init() {
 
 // ============================================================================
 
+func TestJoin(t *testing.T) {
+	a := Rectangle{Position{X: 46, Y: 12}, Size{Width: 55, Height: 27}}
+	b := Rectangle{Position{X: 45, Y: 12}, Size{Width: 55, Height: 27}}
+	a.join(b)
+	if g, e := a, (Rectangle{Position{X: 45, Y: 12}, Size{Width: 56, Height: 27}}); g != e {
+		t.Fatal(g, e)
+	}
+}
+
 func TestDesktopPaintContext(t *testing.T) {
 	s := tcell.NewSimulationScreen("")
 	app, err := newApplication(s, &Theme{})

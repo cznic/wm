@@ -63,7 +63,7 @@ func (m *mouseButtonFSM) run() {
 					m.mods = e.Modifiers()
 					x, y := e.Position()
 					m.pos = Position{x, y}
-					m.timeout = time.After(app.ClickDuration())
+					m.timeout = time.After(App.ClickDuration())
 					m.state = mbsDown
 				}
 			case <-m.timeout:
@@ -76,20 +76,20 @@ func (m *mouseButtonFSM) run() {
 			case e := <-m.in:
 				switch e.Buttons() & m.button {
 				case 0: // Button up.
-					if d := app.DoubleClickDuration(); d != 0 {
+					if d := App.DoubleClickDuration(); d != 0 {
 						m.timeout = time.After(d)
 						m.state = mbsUp
 						break
 					}
 
-					app.screen.PostEvent(newEventMouse(mouseClick, m.button, m.mods, m.pos))
+					App.screen.PostEvent(newEventMouse(mouseClick, m.button, m.mods, m.pos))
 					m.state = mbsIdle
 					m.timeout = nil
 				default: // Button down.
 					m.state = mbsIdle
 				}
 			case <-m.timeout:
-				app.screen.PostEvent(newEventMouse(mouseDrag, m.button, m.mods, m.pos))
+				App.screen.PostEvent(newEventMouse(mouseDrag, m.button, m.mods, m.pos))
 				m.state = mbsDrag
 			case <-m.quit:
 				return
@@ -101,11 +101,11 @@ func (m *mouseButtonFSM) run() {
 				case 0: // Button up.
 					m.state = mbsIdle
 				default: // Button down.
-					app.screen.PostEvent(newEventMouse(mouseDoubleClick, m.button, m.mods, m.pos))
+					App.screen.PostEvent(newEventMouse(mouseDoubleClick, m.button, m.mods, m.pos))
 					m.state = mbsDown2
 				}
 			case <-m.timeout:
-				app.screen.PostEvent(newEventMouse(mouseClick, m.button, m.mods, m.pos))
+				App.screen.PostEvent(newEventMouse(mouseClick, m.button, m.mods, m.pos))
 				m.state = mbsIdle
 				m.timeout = nil
 			case <-m.quit:
@@ -131,7 +131,7 @@ func (m *mouseButtonFSM) run() {
 				switch e.Buttons() & m.button {
 				case 0: // Button up.
 					x, y := e.Position()
-					app.screen.PostEvent(newEventMouse(mouseDrop, m.button, e.Modifiers(), Position{x, y}))
+					App.screen.PostEvent(newEventMouse(mouseDrop, m.button, e.Modifiers(), Position{x, y}))
 					m.state = mbsIdle
 					m.timeout = nil
 				default: // Button down.

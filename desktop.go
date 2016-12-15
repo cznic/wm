@@ -9,8 +9,9 @@ package wm
 //
 // A desktop initially contains only the automatically created root window.
 //
-// Desktop methods must be called only from a function that was enqueued using
-// Application.Post or Application.PostWait.
+// Desktop methods must be called only directly from an event handler goroutine
+// or from a function that was enqueued using Application.Post or
+// Application.PostWait.
 type Desktop struct {
 	invalidated Rectangle //
 	root        *Window   // Never changes.
@@ -19,9 +20,9 @@ type Desktop struct {
 
 func newDesktop() *Desktop {
 	d := &Desktop{}
-	w := newWindow(d, nil, app.DesktopStyle())
+	w := newWindow(d, nil, App.DesktopStyle())
 	d.root = w
-	w.setSize(app.Size())
+	w.setSize(App.Size())
 	d.OnSetSelection(w.onSetSelectionHandler, nil)
 	d.OnSetFocusedWindow(w.onSetFocusedWindowHandler, nil)
 	return d
@@ -117,4 +118,4 @@ func (d *Desktop) SetSelection(area Rectangle) {
 }
 
 // Show sets d as the application active desktop.
-func (d *Desktop) Show() { app.SetDesktop(d) }
+func (d *Desktop) Show() { App.SetDesktop(d) }

@@ -75,10 +75,11 @@ func (r *Rectangle) join(s Rectangle) {
 		return
 	}
 
-	r.X = mathutil.Min(r.X, s.X)
-	r.Width = mathutil.Max(r.X+r.Width, s.X+s.Width) - r.X
-	r.Y = mathutil.Min(r.Y, s.Y)
-	r.Height = mathutil.Max(r.Y+r.Height, s.Y+s.Height) - r.Y
+	x := mathutil.Min(r.X, s.X)
+	r.Width = mathutil.Max(r.X+r.Width, s.X+s.Width) - x
+	y := mathutil.Min(r.Y, s.Y)
+	r.Height = mathutil.Max(r.Y+r.Height, s.Y+s.Height) - y
+	r.Position = Position{x, y}
 }
 
 // Has returns whether r contains p.

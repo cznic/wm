@@ -4,7 +4,47 @@
 
 // Package wm is a terminal window manager.
 //
+// Screenshot
+//
+// An example content of a terminal window (colors cannot be shown here):
+//
+//  Use mouse to resize the window or scroll the view.
+//  Arrow keys change the viewport of the focused window.
+//  To focus the desktop, click on it.
+//  <Esc> or 'q' to quit.
+//
+//                      ┌ view_demo.go ─────────────────────────────────────────────────────[X]┐
+//                      │                                                                     ▴│
+//                      │                                                                     ░│
+//   ┌ view.go ─────────│Use mouse to resize the window or scroll the view.                   ░│
+//   │        "github.co│e the viewport of the focused window.                                ▒│
+//   │        "github.co│ktop, click on it.                                                   ▒│
+//   │)                 │quit.`                                                               ░│
+//   │                  │                                                                     ░│
+//   │// Meter provides │                                                                     ░│────[X]┐
+//   │type Meter interfa│'\n'}                                                                ░│      ▴│
+//   │        // Metrics│                                                                     ░│      ░│
+//   │        // result │arent *wm.Window, x, y int, title string, src []byte) {              ░│      ░│
+//   │        // reflect│rent.Size()                                                          ░│      ░│
+//   │        // values │ || y < 0 {                                                          ░│, len(░│
+//   │        // output │x = rand.Intn(sz.Width - sz.Width/5)                                 ░│      ░│
+//   │        Metrics(vi│y = rand.Intn(sz.Height - sz.Height/5)                               ░│)     ░│
+//   │}                 │                                                                     ░│s:%d: ░│
+//   │                  │ent.NewChild(wm.Rectangle{wm.Position{x, y}, wm.Size{0, 0}})         ░│      ░│
+//   │// View displays c│seButton(true)                                                       ░│      ░│
+//   │◂▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒│le(title)                                                            ░│      ░│
+//   └──────────────────│.HasSuffix(src, nl) {                                                ░│      ▒│
+//                      │src = src[:len(src)-1]                                               ░│      ▒│
+//                      │                                                                     ▾│OOK   ▒│
+//                      │◂░░░░░░░░░░▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒▒░░░░░░░░░░░░░░▸ │)     ▒│
+//                      └──────────────────────────────────────────────────────────────────────┘%d:\n"▒│
+//
+//
 // Changelog
+//
+//
+// 2016-12-16: Initial release of the accompanying toolkit package:
+// http://github.com/cznic/wm/tree/master/tk
 //
 // 2016-11-25: Windows now support views (viewports). See Windows.Origin and
 // friends.
@@ -17,6 +57,7 @@ package wm
 
 import (
 	"fmt"
+	rdebug "runtime/debug"
 	"sync"
 	"time"
 
@@ -26,18 +67,21 @@ import (
 
 const (
 	anyButton = tcell.Button8<<1 - 1
+	anyWheel  = tcell.WheelUp | tcell.WheelDown | tcell.WheelLeft | tcell.WheelRight
 )
 
 var (
-	app                *Application
+	// App is the instance of Application created by NewApplication.
+	App                *Application
 	onceNewApplication sync.Once
 )
 
 // Application represents an interactive terminal application.
 //
-// Application methods must be called only from a function that was enqueued
-// using Application.Post or Application.PostWait. The only exception is
-// Application.Wait, it can be called from any goroutine.
+// Application methods must be called only directly from an event handler
+// goroutine or from a function that was enqueued using Application.Post or
+// Application.PostWait.  The only exception is Application.Wait, it can be
+// called from any goroutine.
 type Application struct {
 	click             time.Duration             //
 	desktop           *Desktop                  //
@@ -110,7 +154,7 @@ func newApplication(screen tcell.Screen, t *Theme) (*Application, error) {
 	var size Size
 	size.Width, size.Height = screen.Size()
 	theme := *t
-	app = &Application{
+	App = &Application{
 		click:       150 * time.Millisecond,
 		doubleClick: 120 * time.Millisecond,
 		screen:      screen,
@@ -120,23 +164,23 @@ func newApplication(screen tcell.Screen, t *Theme) (*Application, error) {
 	}
 
 	mask := tcell.Button1
-	for i := range app.mouseButtonFSMs {
-		app.mouseButtonFSMs[i] = newMouseButtonFSM(mask)
+	for i := range App.mouseButtonFSMs {
+		App.mouseButtonFSMs[i] = newMouseButtonFSM(mask)
 		mask <<= 1
 	}
-	app.screen.EnableMouse()
-	app.OnKey(app.onKeyHandler, nil)
-	app.OnSetDesktop(app.onSetDesktopHandler, nil)
-	app.OnSetSize(app.onSetSizeHandler, nil)
-	go app.handleEvents()
-	return app, nil
+	App.screen.EnableMouse()
+	App.OnKey(App.onKeyHandler, nil)
+	App.OnSetDesktop(App.onSetDesktopHandler, nil)
+	App.OnSetSize(App.onSetSizeHandler, nil)
+	go App.handleEvents()
+	return App, nil
 }
 
 func (a *Application) handleEvents() {
 	defer func() {
 		if err := recover(); err != nil {
 			a.finalize()
-			a.Exit(fmt.Errorf("%v", err))
+			a.Exit(fmt.Errorf("PANIC: %v\n%s", err, rdebug.Stack()))
 		}
 	}()
 
@@ -146,6 +190,15 @@ func (a *Application) handleEvents() {
 			return
 		}
 
+		d := a.desktop
+		var r *Window
+		if d != nil {
+			r = d.root
+		}
+		if r != nil {
+			r.BeginUpdate()
+		}
+
 		switch e := ev.(type) {
 		case *tcell.EventResize:
 			a.setSize(newSize(e.Size()))
@@ -153,12 +206,13 @@ func (a *Application) handleEvents() {
 			a.onKey.handle(nil, e.Key(), e.Modifiers(), e.Rune())
 		case *tcell.EventMouse:
 			x, y := e.Position()
-			if x != a.mouseX || y != a.mouseY {
+			btn := e.Buttons()
+			if x != a.mouseX || y != a.mouseY || btn&anyWheel != 0 {
 				a.mouseX = x
 				a.mouseY = y
-				app.screen.PostEvent(newEventMouse(mouseMove, 0, e.Modifiers(), Position{x, y}))
+				a.screen.PostEvent(newEventMouse(mouseMove, btn, e.Modifiers(), Position{x, y}))
 			}
-			if b := e.Buttons() & anyButton; b != a.mouseButtonsState {
+			if b := btn & anyButton; b != a.mouseButtonsState {
 				diff := b ^ a.mouseButtonsState
 				a.mouseButtonsState = b
 				x := 0
@@ -182,7 +236,7 @@ func (a *Application) handleEvents() {
 			case mouseDoubleClick:
 				w.doubleClick(e.button, e.Position, e.mods)
 			case mouseMove:
-				w.mouseMove(e.Position, e.mods)
+				w.mouseMove(e.button, e.Position, e.mods)
 			default:
 				panic(fmt.Errorf("%v", e.kind))
 			}
@@ -192,6 +246,10 @@ func (a *Application) handleEvents() {
 			e.dispose()
 		default:
 			panic(fmt.Errorf("%T", e))
+		}
+
+		if r != nil {
+			r.EndUpdate()
 		}
 	}
 }
@@ -220,11 +278,10 @@ func (a *Application) onKeyHandler(w *Window, prev OnKeyHandler, key tcell.Key, 
 
 	fw := d.FocusedWindow()
 	if fw == nil {
-		return true
+		return false
 	}
 
-	fw.onKey.handle(fw, key, mod, r)
-	return true
+	return fw.onKey.handle(fw, key, mod, r)
 }
 
 func (a *Application) onSetSizeHandler(_ *Window, prev OnSetSizeHandler, dst *Size, src Size) {
@@ -279,31 +336,40 @@ func (a *Application) paintSelection() {
 	}
 }
 
-// beginUpdate marks the start of one or more updates to the application
-// screen.
-func (a *Application) beginUpdate() {
-	a.updateLevel++
-	if a.updateLevel == 1 {
-		a.paintSelection() // Remove selection.
-	}
-}
-
-// endUpdate marks the end of one or more updates to the application screen.
-func (a *Application) endUpdate() {
-	a.updateLevel--
-	if a.updateLevel == 0 {
-		a.paintSelection() // Show selection.
-		a.screen.Show()
-	}
-}
+var marker = Style{Background: tcell.ColorRed, Foreground: tcell.ColorBlack}
 
 func (a *Application) setCell(p Position, mainc rune, combc []rune, style tcell.Style) {
-	a.screen.SetContent(p.X, p.Y, mainc, combc, style)
+	switch {
+	case debug:
+		// Make screen updates slow enough for human observation.
+		a.screen.SetContent(p.X, p.Y, tcell.RuneDiamond, nil, marker.TCellStyle())
+		a.screen.Show()
+		a.screen.SetContent(p.X, p.Y, mainc, combc, style)
+		a.screen.Show()
+		a.screen.SetContent(p.X, p.Y, tcell.RuneDiamond, nil, marker.TCellStyle())
+		a.screen.Show()
+		a.screen.SetContent(p.X, p.Y, mainc, combc, style)
+		a.screen.Show()
+	default:
+		a.screen.SetContent(p.X, p.Y, mainc, combc, style)
+	}
 }
 
 func (a *Application) finalize() { a.onceFinalize.Do(func() { a.screen.Fini() }) }
 
 // ----------------------------------------------------------------------------
+
+// BeginUpdate marks the start of one or more updates to the application
+// screen.
+//
+// Failing to properly pair BeginUpdate with a corresponding EndUpdate will
+// cause application screen corruption and/or freeze.
+func (a *Application) BeginUpdate() {
+	a.updateLevel++
+	if a.updateLevel == 1 {
+		a.paintSelection() // Remove selection.
+	}
+}
 
 // ChildWindowStyle returns the style assigned to new child windows.
 func (a *Application) ChildWindowStyle() WindowStyle { return a.theme.ChildWindow }
@@ -327,6 +393,18 @@ func (a *Application) DesktopStyle() WindowStyle { return a.theme.Desktop }
 // click not followed by another one within the DoubleClickDuration is a single
 // click.
 func (a *Application) DoubleClickDuration() time.Duration { return a.doubleClick }
+
+// EndUpdate marks the end of one or more updates to the application screen.
+//
+// Failing to properly pair BeginUpdate with a corresponding EndUpdate will
+// cause application screen corruption and/or freeze.
+func (a *Application) EndUpdate() {
+	a.updateLevel--
+	if a.updateLevel == 0 {
+		a.paintSelection() // Show selection.
+		a.screen.Show()
+	}
+}
 
 // Exit terminates the interactive terminal application and returns err from
 // Wait(). Only the first call of this method is considered.
@@ -397,6 +475,15 @@ func (a *Application) RemoveOnSetDoubleClickDuration() {
 // RemoveOnSetSize undoes the most recent OnSetSize call. The function
 // will panic if there is no handler set.
 func (a *Application) RemoveOnSetSize() { RemoveOnSetSizeHandler(&a.onSetSize) }
+
+// Run is a shorthand for
+//
+//	app.PostWait(setup)
+//	return app.Wait()
+func (a *Application) Run(setup func()) error {
+	a.PostWait(setup)
+	return a.Wait()
+}
 
 // SetClickDuration sets the maximum duration of a single click. Holding a
 // mouse button for any longer duration generates a drag event instead.

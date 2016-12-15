@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-// PaintContext represent painting context passed to paint handlers.
+// PaintContext represents the context passed to paint handlers.
 type PaintContext struct {
 	Rectangle
 	origin Position
@@ -57,9 +57,9 @@ func (l *onCloseHandlerList) clear() {
 
 func (l *onCloseHandlerList) handle(w *Window) {
 	if l != nil {
-		w.beginUpdate()
+		w.BeginUpdate()
 		l.h(w, nil)
-		w.endUpdate()
+		w.EndUpdate()
 		return
 	}
 
@@ -115,14 +115,15 @@ func (l *onKeyHandlerList) clear() {
 	}
 }
 
-func (l *onKeyHandlerList) handle(w *Window, key tcell.Key, mod tcell.ModMask, r rune) {
+func (l *onKeyHandlerList) handle(w *Window, key tcell.Key, mod tcell.ModMask, r rune) bool {
 	if l != nil {
-		w.beginUpdate()
-		l.h(w, nil, key, mod, r)
-		w.endUpdate()
-		return
+		w.BeginUpdate()
+		r := l.h(w, nil, key, mod, r)
+		w.EndUpdate()
+		return r
 	}
 
+	return false
 }
 
 func removeOnKeyHandler(l **onKeyHandlerList) {
@@ -140,23 +141,25 @@ func removeOnKeyHandler(l **onKeyHandlerList) {
 // other subscribed handlers.
 type OnMouseHandler func(w *Window, prev OnMouseHandler, button tcell.ButtonMask, screenPos, winPos Position, mods tcell.ModMask) bool
 
-type onMouseHandlerList struct {
-	prev      *onMouseHandlerList
+// OnMouseHandlerList represents a list of handlers subscribed to an event.
+type OnMouseHandlerList struct {
+	prev      *OnMouseHandlerList
 	h         OnMouseHandler
 	finalizer func()
 }
 
-func addOnMouseHandler(l **onMouseHandlerList, h OnMouseHandler, finalizer func()) {
+// AddOnMouseHandler adds a handler to the handler list.
+func AddOnMouseHandler(l **OnMouseHandlerList, h OnMouseHandler, finalizer func()) {
 	prev := *l
 	if prev == nil {
-		*l = &onMouseHandlerList{
+		*l = &OnMouseHandlerList{
 			h:         h,
 			finalizer: finalizer,
 		}
 		return
 	}
 
-	*l = &onMouseHandlerList{
+	*l = &OnMouseHandlerList{
 		prev: prev,
 		h: func(w *Window, _ OnMouseHandler, button tcell.ButtonMask, screenPos, winPos Position, mods tcell.ModMask) bool {
 			return h(w, prev.h, button, screenPos, winPos, mods)
@@ -165,7 +168,8 @@ func addOnMouseHandler(l **onMouseHandlerList, h OnMouseHandler, finalizer func(
 	}
 }
 
-func (l *onMouseHandlerList) clear() {
+// Clear calls any finalizers on the handler list.
+func (l *OnMouseHandlerList) Clear() {
 	for l != nil {
 		if f := l.finalizer; f != nil {
 			f()
@@ -174,15 +178,20 @@ func (l *onMouseHandlerList) clear() {
 	}
 }
 
-func (l *onMouseHandlerList) handle(w *Window, button tcell.ButtonMask, screenPos, winPos Position, mods tcell.ModMask) {
+// Handle performs handling mouse events.
+func (l *OnMouseHandlerList) Handle(w *Window, button tcell.ButtonMask, screenPos, winPos Position, mods tcell.ModMask) bool {
 	if l != nil {
-		w.beginUpdate()
-		l.h(w, nil, button, screenPos, winPos, mods)
-		w.endUpdate()
+		w.BeginUpdate()
+		r := l.h(w, nil, button, screenPos, winPos, mods)
+		w.EndUpdate()
+		return r
 	}
+
+	return false
 }
 
-func removeOnMouseHandler(l **onMouseHandlerList) {
+// RemoveOnMouseHandler undoes the most recent call to AddOnMouseHandler.
+func RemoveOnMouseHandler(l **OnMouseHandlerList) {
 	node := *l
 	*l = node.prev
 	if f := node.finalizer; f != nil {
@@ -312,9 +321,9 @@ func (l *onSetDesktopHandlerList) handle(w *Window, dst **Desktop, src *Desktop)
 		return
 	}
 
-	w.beginUpdate()
+	w.BeginUpdate()
 	l.h(w, nil, dst, src)
-	w.endUpdate()
+	w.EndUpdate()
 }
 
 func removeOnSetDesktopHandler(l **onSetDesktopHandlerList) {
@@ -376,9 +385,9 @@ func (l *onSetDurationHandlerList) handle(w *Window, dst *time.Duration, src tim
 		return
 	}
 
-	w.beginUpdate()
+	w.BeginUpdate()
 	l.h(w, nil, dst, src)
-	w.endUpdate()
+	w.EndUpdate()
 }
 
 func removeOnSetDurationHandler(l **onSetDurationHandlerList) {
@@ -395,23 +404,25 @@ func removeOnSetDurationHandler(l **onSetDurationHandlerList) {
 // own execution.
 type OnSetBoolHandler func(w *Window, prev OnSetBoolHandler, dst *bool, src bool)
 
-type onSetBoolHandlerList struct {
-	prev      *onSetBoolHandlerList
+// OnSetBoolHandlerList represents a list of handlers subscribed to an event.
+type OnSetBoolHandlerList struct {
+	prev      *OnSetBoolHandlerList
 	h         OnSetBoolHandler
 	finalizer func()
 }
 
-func addOnSetBoolHandler(l **onSetBoolHandlerList, h OnSetBoolHandler, finalizer func()) {
+// AddOnSetBoolHandler adds a handler to the handler list.
+func AddOnSetBoolHandler(l **OnSetBoolHandlerList, h OnSetBoolHandler, finalizer func()) {
 	prev := *l
 	if prev == nil {
-		*l = &onSetBoolHandlerList{
+		*l = &OnSetBoolHandlerList{
 			h:         h,
 			finalizer: finalizer,
 		}
 		return
 	}
 
-	*l = &onSetBoolHandlerList{
+	*l = &OnSetBoolHandlerList{
 		prev: prev,
 		h: func(w *Window, _ OnSetBoolHandler, dst *bool, src bool) {
 			h(w, prev.h, dst, src)
@@ -420,7 +431,8 @@ func addOnSetBoolHandler(l **onSetBoolHandlerList, h OnSetBoolHandler, finalizer
 	}
 }
 
-func (l *onSetBoolHandlerList) clear() {
+// Clear calls any finalizers on the handler list.
+func (l *OnSetBoolHandlerList) Clear() {
 	for l != nil {
 		if f := l.finalizer; f != nil {
 			f()
@@ -429,7 +441,8 @@ func (l *onSetBoolHandlerList) clear() {
 	}
 }
 
-func (l *onSetBoolHandlerList) handle(w *Window, dst *bool, src bool) {
+// Handle performs updating of dst from src or calling and associated handler.
+func (l *OnSetBoolHandlerList) Handle(w *Window, dst *bool, src bool) {
 	if *dst == src {
 		return
 	}
@@ -439,12 +452,13 @@ func (l *onSetBoolHandlerList) handle(w *Window, dst *bool, src bool) {
 		return
 	}
 
-	w.beginUpdate()
+	w.BeginUpdate()
 	l.h(w, nil, dst, src)
-	w.endUpdate()
+	w.EndUpdate()
 }
 
-func removeOnSetBoolHandler(l **onSetBoolHandlerList) {
+// RemoveOnSetBoolHandler undoes the most recent call to AddOnSetBoolHandler.
+func RemoveOnSetBoolHandler(l **OnSetBoolHandlerList) {
 	node := *l
 	*l = node.prev
 	if f := node.finalizer; f != nil {
@@ -506,9 +520,9 @@ func (l *OnSetIntHandlerList) Handle(w *Window, dst *int, src int) {
 		return
 	}
 
-	w.beginUpdate()
+	w.BeginUpdate()
 	l.h(w, nil, dst, src)
-	w.endUpdate()
+	w.EndUpdate()
 }
 
 // RemoveOnSetIntHandler undoes the most recent call to AddOnSetIntHandler.
@@ -574,9 +588,9 @@ func (l *OnSetPositionHandlerList) Handle(w *Window, dst *Position, src Position
 		return
 	}
 
-	w.beginUpdate()
+	w.BeginUpdate()
 	l.h(w, nil, dst, src)
-	w.endUpdate()
+	w.EndUpdate()
 }
 
 // RemoveOnSetPositionHandler undoes the most recent call to
@@ -639,9 +653,9 @@ func (l *onSetRectangleHandlerList) handle(w *Window, dst *Rectangle, src Rectan
 		return
 	}
 
-	w.beginUpdate()
+	w.BeginUpdate()
 	l.h(w, nil, dst, src)
-	w.endUpdate()
+	w.EndUpdate()
 }
 
 func removeOnSetRectangleHandler(l **onSetRectangleHandlerList) {
@@ -706,9 +720,9 @@ func (l *OnSetSizeHandlerList) Handle(w *Window, dst *Size, src Size) {
 		return
 	}
 
-	w.beginUpdate()
+	w.BeginUpdate()
 	l.h(w, nil, dst, src)
-	w.endUpdate()
+	w.EndUpdate()
 }
 
 // RemoveOnSetSizeHandler undoes the most recent call to AddOnSetSizeHandler.
@@ -770,9 +784,9 @@ func (l *onSetStringHandlerList) handle(w *Window, dst *string, src string) {
 		return
 	}
 
-	w.beginUpdate()
+	w.BeginUpdate()
 	l.h(w, nil, dst, src)
-	w.endUpdate()
+	w.EndUpdate()
 }
 
 func removeOnSetStringHandler(l **onSetStringHandlerList) {
@@ -837,9 +851,9 @@ func (l *OnSetStyleHandlerList) Handle(w *Window, dst *Style, src Style) {
 		return
 	}
 
-	w.beginUpdate()
+	w.BeginUpdate()
 	l.h(w, nil, dst, src)
-	w.endUpdate()
+	w.EndUpdate()
 }
 
 // RemoveOnSetStyleHandler undoes the most recent call to AddOnSetStyleHandler.
@@ -901,9 +915,9 @@ func (l *onSetWindowHandlerList) handle(w *Window, dst **Window, src *Window) {
 		return
 	}
 
-	w.beginUpdate()
+	w.BeginUpdate()
 	l.h(w, nil, dst, src)
-	w.endUpdate()
+	w.EndUpdate()
 }
 
 func removeOnSetWindowHandler(l **onSetWindowHandlerList) {
@@ -965,9 +979,9 @@ func (l *onSetWindowStyleHandlerList) handle(w *Window, dst *WindowStyle, src Wi
 		return
 	}
 
-	w.beginUpdate()
+	w.BeginUpdate()
 	l.h(w, nil, dst, src)
-	w.endUpdate()
+	w.EndUpdate()
 }
 
 func removeOnSetWindowStyleHandler(l **onSetWindowStyleHandlerList) {

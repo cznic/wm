@@ -1,4 +1,4 @@
-# Copyright 2015 The WM Authors. All rights reserved.
+# Copyright 2016 The WM Authors. All rights reserved.
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
@@ -25,19 +25,19 @@ clean:
 cover:
 	t=$(shell tempfile) ; go test -coverprofile $$t && go tool cover -html $$t && unlink $$t
 
+demo:
+	go run test.go
+
 cpu: clean
 	go test -run @ -bench . -cpuprofile cpu.out
 	go tool pprof -lines *.test cpu.out
-
-demo:
-	go run demo.go
 
 edit:
 	@ 1>/dev/null 2>/dev/null gvim -p Makefile *.go
 
 editor:
 	gofmt -l -s -w *.go
-	go test 2>&1 | tee log
+	go test
 	go install
 
 internalError:

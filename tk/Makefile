@@ -2,7 +2,7 @@
 # Use of this source code is governed by a BSD-style
 # license that can be found in the LICENSE file.
 
-.PHONY:	all clean cover cpu editor internalError later mem nuke todo edit demo
+.PHONY:	all clean cover cpu editor internalError later mem nuke todo edit
 
 grep=--include=*.go --include=*.l --include=*.y --include=*.yy
 ngrep='TODOOK\|parser\.go\|scanner\.go\|.*_string\.go'
@@ -29,16 +29,14 @@ cpu: clean
 	go test -run @ -bench . -cpuprofile cpu.out
 	go tool pprof -lines *.test cpu.out
 
-demo:
-	go run demo.go
-
 edit:
 	@ 1>/dev/null 2>/dev/null gvim -p Makefile *.go
 
 editor:
+	go generate
 	gofmt -l -s -w *.go
-	go test 2>&1 | tee log
-	go install
+	go test
+	go build
 
 internalError:
 	egrep -ho '"internal error.*"' *.go | sort | cat -n

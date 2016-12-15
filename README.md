@@ -12,3 +12,9 @@ Documentation: [godoc.org/github.com/cznic/wm](http://godoc.org/github.com/cznic
 Demo
 
     $ go run demo.go
+
+---
+
+Screen shot (go run view_demo.go in tk/)
+
+![](https://github.com/cznic/wm/blob/images/tk.png)
