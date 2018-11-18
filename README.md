@@ -1,20 +1,5 @@
-# wm
-Package wm is a terminal window manager.
+`github.com/cznic/wm` has moved to [`modernc.org/wm`](https://godoc.org/modernc.org/wm) ([vcs](https://gitlab.com/cznic/wm)).
 
-Installation
+Please update your import paths to `modernc.org/wm`.
 
-    $ go get github.com/cznic/wm
-
-Documentation: [godoc.org/github.com/cznic/wm](http://godoc.org/github.com/cznic/wm)
-
-----
-
-Demo
-
-    $ go run demo.go
-
----
-
-Screen shot (go run view_demo.go in tk/)
-
-![](https://github.com/cznic/wm/blob/images/tk.png)
+This repo is now archived.
